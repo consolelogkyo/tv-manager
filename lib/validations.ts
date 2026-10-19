@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isValidISODate } from "@/lib/date";
 import { MAC_REGEX, onlyDigits, parseCurrency } from "@/lib/format";
+import { isSafeHttpUrl, normalizeUrlInput } from "@/lib/tv-apps";
 
 /**
  * Schema compartilhado entre o formulário (cliente) e as Server Actions
@@ -61,3 +62,49 @@ export const signInSchema = z.object({
   email: z.string().trim().toLowerCase().email("Informe um e-mail válido").max(254),
   password: z.string().min(1, "Informe sua senha").max(128, "Senha muito longa"),
 });
+
+/* ------------------------------------------------------- Catálogo de Apps --- */
+
+/**
+ * Schema do catálogo de apps por TV. Mesmo padrão dos clientes: usado no
+ * formulário (UX) e SEMPRE revalidado nas Server Actions.
+ */
+export const tvAppFormSchema = z.object({
+  tv_brand: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\s+/g, " "))
+    .pipe(z.string().min(2, "Informe a marca/sistema da TV").max(80, "Máximo de 80 caracteres")),
+  app_name: z.string().trim().min(1, "Informe o nome do app").max(60, "Máximo de 60 caracteres"),
+  priority: z.enum(["1", "2", "3"], { message: "Escolha a prioridade" }),
+  is_favorite: z.boolean(),
+  license_info: z.string().trim().max(60, "Máximo de 60 caracteres"),
+  activation_url: z
+    .string()
+    .trim()
+    .max(500, "URL muito longa")
+    .transform(normalizeUrlInput)
+    .refine((v) => v === "" || isSafeHttpUrl(v), "Informe uma URL válida (https://...)"),
+  notes: z.string().trim().max(1000, "Máximo de 1000 caracteres"),
+});
+
+export type TvAppFormValues = z.input<typeof tvAppFormSchema>;
+export type TvAppFormOutput = z.output<typeof tvAppFormSchema>;
+
+export function toTvAppRow(values: TvAppFormOutput) {
+  return {
+    tv_brand: values.tv_brand,
+    app_name: values.app_name,
+    priority: Number(values.priority),
+    is_favorite: values.is_favorite,
+    license_info: values.license_info || null,
+    activation_url: values.activation_url || null,
+    notes: values.notes || null,
+  };
+}
+
+export const tvAppIdSchema = z.string().uuid("ID inválido");
+
+export const priorityDirectionSchema = z.enum(["up", "down"]);
+
+export const favoriteValueSchema = z.boolean();

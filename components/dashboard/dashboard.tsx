@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getDaysRemaining, getStatus } from "@/lib/date";
 import { onlyDigits } from "@/lib/format";
-import type { Customer } from "@/lib/types";
+import type { AppSuggestion, Customer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const FILTERS: { value: StatusFilter; label: string; dot?: string }[] = [
@@ -27,7 +27,15 @@ function normalizeText(value: string) {
     .toLowerCase();
 }
 
-export function Dashboard({ customers, today }: { customers: Customer[]; today: string }) {
+export function Dashboard({
+  customers,
+  today,
+  appSuggestions = [],
+}: {
+  customers: Customer[];
+  today: string;
+  appSuggestions?: AppSuggestion[];
+}) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [formOpen, setFormOpen] = useState(false);
@@ -198,7 +206,12 @@ export function Dashboard({ customers, today }: { customers: Customer[]; today: 
         <Plus className="size-6" />
       </Button>
 
-      <CustomerFormDialog open={formOpen} onOpenChange={setFormOpen} customer={editing} />
+      <CustomerFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        customer={editing}
+        appSuggestions={appSuggestions}
+      />
     </div>
   );
 }

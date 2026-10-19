@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect, useMemo, useTransition } from "react";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Save, UserPlus } from "lucide-react";
+import { Loader2, Save, Star, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { createCustomer, updateCustomer } from "@/app/actions/customers";
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { addDaysISO, getTodayISO } from "@/lib/date";
 import { formatPhone, maskCurrency, maskMac, maskPhone, numberToCurrencyInput } from "@/lib/format";
-import type { Customer } from "@/lib/types";
+import type { AppSuggestion, Customer } from "@/lib/types";
+import { normalizeText, shortBrandLabel } from "@/lib/tv-apps";
 import { customerFormSchema, type CustomerFormValues } from "@/lib/validations";
 import { cn } from "@/lib/utils";
+
+const MAX_QUICK_SUGGESTIONS = 6;
 
 function getDefaults(customer: Customer | null): CustomerFormValues {
   if (customer) {
@@ -51,9 +54,10 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   customer: Customer | null;
+  appSuggestions?: AppSuggestion[];
 };
 
-export function CustomerFormDialog({ open, onOpenChange, customer }: Props) {
+export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestions = [] }: Props) {
   const isEdit = Boolean(customer);
   const [pending, startTransition] = useTransition();
 
@@ -68,8 +72,23 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: Props) {
     handleSubmit,
     reset,
     setError,
+    setValue,
+    watch,
     formState: { errors },
   } = form;
+
+  const appValue = watch("app_name") ?? "";
+
+  // Chips rápidos: filtra pelo texto digitado; favoritos sempre no topo.
+  const quickSuggestions = useMemo(() => {
+    const q = normalizeText(appValue);
+    const list = q ? appSuggestions.filter((s) => normalizeText(s.name).includes(q)) : appSuggestions;
+    return list.slice(0, MAX_QUICK_SUGGESTIONS);
+  }, [appSuggestions, appValue]);
+
+  function pickApp(name: string) {
+    setValue("app_name", name, { shouldDirty: true, shouldValidate: true, shouldTouch: true });
+  }
 
   // Recarrega os valores sempre que o modal abre (novo cliente ou outro cliente).
   useEffect(() => {
@@ -165,9 +184,51 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: Props) {
                 placeholder="Ex.: IPTV Smarters"
                 autoComplete="off"
                 maxLength={60}
+                list={appSuggestions.length > 0 ? "customer-app-suggestions" : undefined}
                 aria-invalid={Boolean(errors.app_name)}
                 {...register("app_name")}
               />
+              {appSuggestions.length > 0 && (
+                <>
+                  <datalist id="customer-app-suggestions">
+                    {appSuggestions.map((s) => (
+                      <option
+                        key={s.name}
+                        value={s.name}
+                        label={`${s.isFavorite ? "⭐ Favorito · " : ""}${s.brands.map(shortBrandLabel).join(", ")}`}
+                      />
+                    ))}
+                  </datalist>
+                  {quickSuggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5" aria-label="Sugestões do catálogo de apps">
+                      {quickSuggestions.map((s) => {
+                        const selected = normalizeText(appValue) === normalizeText(s.name);
+                        return (
+                          <button
+                            key={s.name}
+                            type="button"
+                            id={`customer-app-suggestion-${normalizeText(s.name).replace(/[^a-z0-9]+/g, "-")}`}
+                            onClick={() => pickApp(s.name)}
+                            title={s.brands.join(" · ")}
+                            aria-pressed={selected}
+                            className={cn(
+                              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-all cursor-pointer active:scale-95",
+                              selected
+                                ? "border-primary/60 bg-primary/20 text-foreground"
+                                : s.isFavorite
+                                  ? "border-warning/35 bg-warning/10 text-warning hover:bg-warning/20"
+                                  : "border-border/70 bg-card/50 text-muted-foreground hover:bg-muted hover:text-foreground",
+                            )}
+                          >
+                            {s.isFavorite && <Star className="size-3 fill-current" />}
+                            <span className="truncate">{s.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </Field>
 
             <Field label="Valor do plano" htmlFor="customer-value" error={errors.plan_value?.message}>

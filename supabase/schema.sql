@@ -142,3 +142,67 @@ create policy "customers_delete_authenticated"
 -- select id from auth.users
 -- where email in ('voce@exemplo.com', 'socio@exemplo.com')
 -- on conflict (user_id) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- 5. Catálogo de Apps por TV (public.tv_apps)
+-- -----------------------------------------------------------------------------
+-- A tabela já foi criada manualmente; este bloco é idempotente e apenas garante
+-- a estrutura, o trigger de updated_at e as mesmas regras de RLS dos clientes.
+create table if not exists public.tv_apps (
+  id             uuid primary key default gen_random_uuid(),
+  tv_brand       text not null,
+  app_name       text not null,
+  priority       integer not null default 1,
+  is_favorite    boolean not null default false,
+  license_info   text,
+  activation_url text,
+  notes          text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+-- "not valid": não revalida linhas antigas, mas vale para todo INSERT/UPDATE novo.
+alter table public.tv_apps drop constraint if exists tv_apps_priority_range;
+alter table public.tv_apps
+  add constraint tv_apps_priority_range check (priority between 1 and 3) not valid;
+
+-- Defesa em profundidade contra links javascript:/data: gravados direto no banco.
+alter table public.tv_apps drop constraint if exists tv_apps_activation_url_http;
+alter table public.tv_apps
+  add constraint tv_apps_activation_url_http
+  check (activation_url is null or activation_url ~* '^https?://') not valid;
+
+create index if not exists tv_apps_brand_order_idx
+  on public.tv_apps (tv_brand, is_favorite desc, priority asc);
+
+drop trigger if exists tv_apps_set_updated_at on public.tv_apps;
+create trigger tv_apps_set_updated_at
+  before update on public.tv_apps
+  for each row
+  execute function public.set_updated_at();
+
+alter table public.tv_apps enable row level security;
+
+revoke all on public.tv_apps from anon;
+grant select, insert, update, delete on public.tv_apps to authenticated;
+
+drop policy if exists "tv_apps_select_admin" on public.tv_apps;
+create policy "tv_apps_select_admin"
+  on public.tv_apps for select to authenticated
+  using (public.is_admin());
+
+drop policy if exists "tv_apps_insert_admin" on public.tv_apps;
+create policy "tv_apps_insert_admin"
+  on public.tv_apps for insert to authenticated
+  with check (public.is_admin());
+
+drop policy if exists "tv_apps_update_admin" on public.tv_apps;
+create policy "tv_apps_update_admin"
+  on public.tv_apps for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "tv_apps_delete_admin" on public.tv_apps;
+create policy "tv_apps_delete_admin"
+  on public.tv_apps for delete to authenticated
+  using (public.is_admin());
