@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_PLAN_VALUE, MIN_PLAN_VALUE } from "@/lib/business";
+import { MAX_CREDIT_UNIT_COST, MAX_PLAN_VALUE, MIN_CREDIT_UNIT_COST, MIN_PLAN_VALUE } from "@/lib/business";
 import { isValidISODate } from "@/lib/date";
 import { MAC_REGEX, onlyDigits, parseCurrency } from "@/lib/format";
 import type { UserRole } from "@/lib/types";
@@ -99,6 +99,13 @@ export function toCustomerRow(values: CustomerFormValues, role: UserRole) {
 }
 
 export const customerIdSchema = z.string().uuid("ID inválido");
+
+/** Custo unitário do crédito (R$), arredondado para centavos. Usado no modal (UX) e na Server Action. */
+export const creditUnitCostSchema = z
+  .number({ message: "Informe um valor válido" }) // Zod 4 já rejeita NaN/Infinity
+  .min(MIN_CREDIT_UNIT_COST, "O custo não pode ser negativo")
+  .max(MAX_CREDIT_UNIT_COST, "O custo máximo é R$ 1.000,00")
+  .transform((n) => Math.round(n * 100) / 100);
 
 export const renewModeSchema = z.enum(["auto", "from_expiry", "from_today"]);
 

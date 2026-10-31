@@ -8,7 +8,7 @@ import type { EnrichedCustomer, StatusFilter } from "@/components/customers/type
 import { KpiCards, type Kpis } from "@/components/dashboard/kpi-cards";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getKpiContribution } from "@/lib/business";
+import { consumesCredit, getKpiContribution } from "@/lib/business";
 import { getDaysRemaining, getStatus } from "@/lib/date";
 import { onlyDigits } from "@/lib/format";
 import type { AppSuggestion, Customer, UserRole } from "@/lib/types";
@@ -33,11 +33,14 @@ export function Dashboard({
   today,
   appSuggestions = [],
   userRole,
+  creditUnitCost = null,
 }: {
   customers: Customer[];
   today: string;
   appSuggestions?: AppSuggestion[];
   userRole: UserRole;
+  /** Custo unitário do crédito (somente admin; `null` para o revendedor). */
+  creditUnitCost?: number | null;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
@@ -61,19 +64,29 @@ export function Dashboard({
   // - admin    → saldo líquido (comissão do revendedor e custos internos abatidos).
   const kpis = useMemo<Kpis>(() => {
     let activeCount = 0;
+    let payingActiveCount = 0;
     let expiringCount = 0;
     let expiredCount = 0;
     let monthlyRevenue = 0;
     for (const c of enriched) {
-      if (c.days >= 0) {
+      const isActive = c.days >= 0;
+      if (isActive) {
         activeCount += 1;
         monthlyRevenue += getKpiContribution(c, userRole);
       } else {
         expiredCount += 1;
       }
+      // Custo de créditos: só ativos pagantes (custos internos negativos não consomem crédito).
+      if (consumesCredit(c, isActive)) payingActiveCount += 1;
       if (c.status === "expiring") expiringCount += 1;
     }
-    return { activeCount, expiringCount, expiredCount, monthlyRevenue: Math.round(monthlyRevenue * 100) / 100 };
+    return {
+      activeCount,
+      payingActiveCount,
+      expiringCount,
+      expiredCount,
+      monthlyRevenue: Math.round(monthlyRevenue * 100) / 100,
+    };
   }, [enriched, userRole]);
 
   const counts = useMemo(() => {
@@ -110,7 +123,13 @@ export function Dashboard({
 
   return (
     <div className="space-y-6">
-      <KpiCards kpis={kpis} activeFilter={filter} onSelect={setFilter} userRole={userRole} />
+      <KpiCards
+        kpis={kpis}
+        activeFilter={filter}
+        onSelect={setFilter}
+        userRole={userRole}
+        creditUnitCost={creditUnitCost}
+      />
 
       <section aria-labelledby="customers-title" className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

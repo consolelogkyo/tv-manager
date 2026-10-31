@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCustomers } from "@/app/actions/customers";
+import { getCreditUnitCost } from "@/app/actions/settings";
 import { getTvApps } from "@/app/actions/tv-apps";
 import { AppHeader } from "@/components/dashboard/app-header";
 import { Dashboard } from "@/components/dashboard/dashboard";
@@ -19,7 +20,12 @@ export default async function HomePage() {
   }
 
   // As sugestões de apps são um bônus: se o catálogo falhar, o painel de clientes continua funcionando.
-  const [customers, tvApps] = await Promise.all([getCustomers(), getTvApps().catch(() => [])]);
+  // O custo do crédito é exclusivo dos admins (nem é consultado para o revendedor).
+  const [customers, tvApps, creditUnitCost] = await Promise.all([
+    getCustomers(),
+    getTvApps().catch(() => []),
+    userRole === "admin" ? getCreditUnitCost() : Promise.resolve(null),
+  ]);
   const today = getTodayISO();
   const appSuggestions = buildAppSuggestions(tvApps);
 
@@ -33,7 +39,13 @@ export default async function HomePage() {
             <span className="text-gradient">{userRole === "reseller" ? "Meus clientes" : "Painel de assinaturas"}</span>
           </h1>
         </div>
-        <Dashboard customers={customers} today={today} appSuggestions={appSuggestions} userRole={userRole} />
+        <Dashboard
+          customers={customers}
+          today={today}
+          appSuggestions={appSuggestions}
+          userRole={userRole}
+          creditUnitCost={creditUnitCost}
+        />
       </main>
     </>
   );

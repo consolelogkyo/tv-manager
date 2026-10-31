@@ -17,6 +17,13 @@ export const MIN_PLAN_VALUE = -10_000;
 /** Limite superior de `numeric(10, 2)`. */
 export const MAX_PLAN_VALUE = 99_999_999.99;
 
+/** Custo padrão de 1 crédito (R$) quando `app_settings` não puder ser lido. */
+export const DEFAULT_CREDIT_UNIT_COST = 5;
+
+/** Faixa aceita para o custo unitário do crédito (R$). */
+export const MIN_CREDIT_UNIT_COST = 0;
+export const MAX_CREDIT_UNIT_COST = 1000;
+
 type ValueFields = Pick<Customer, "plan_value" | "is_reseller">;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -41,5 +48,18 @@ export function getNetValueForHouse(customer: ValueFields): number {
  */
 export function getKpiContribution(customer: ValueFields, role: UserRole): number {
   return role === "reseller" ? RESELLER_COMMISSION : getNetValueForHouse(customer);
+}
+
+/**
+ * Cliente que consome crédito: ativo e pagante. Lançamentos de
+ * "Desconto / Custo Interno" (`plan_value < 0`) ficam fora da conta.
+ */
+export function consumesCredit(customer: Pick<Customer, "plan_value">, isActive: boolean): boolean {
+  return isActive && customer.plan_value >= 0;
+}
+
+/** Custo total de créditos = clientes ativos pagantes × custo unitário. */
+export function getCreditsTotalCost(payingActiveCount: number, creditUnitCost: number): number {
+  return round2(payingActiveCount * creditUnitCost);
 }
 

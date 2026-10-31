@@ -1,14 +1,18 @@
 "use client";
 
-import { AlertTriangle, CircleDollarSign, HandCoins, Users, XCircle } from "lucide-react";
+import type { ReactNode } from "react";
+import { AlertTriangle, CircleDollarSign, Coins, HandCoins, Users, XCircle, type LucideIcon } from "lucide-react";
 import type { StatusFilter } from "@/components/customers/types";
-import { RESELLER_COMMISSION } from "@/lib/business";
+import { CreditCostEditor } from "@/components/dashboard/credit-cost-editor";
+import { RESELLER_COMMISSION, getCreditsTotalCost } from "@/lib/business";
 import { formatCurrency } from "@/lib/format";
 import type { UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type Kpis = {
   activeCount: number;
+  /** Ativos com `plan_value >= 0` (exclui "Desconto / Custo Interno"). */
+  payingActiveCount: number;
   expiringCount: number;
   expiredCount: number;
   /** admin: saldo líquido · reseller: comissão total. */
@@ -20,13 +24,46 @@ type Props = {
   activeFilter: StatusFilter;
   onSelect: (filter: StatusFilter) => void;
   userRole: UserRole;
+  /** Custo unitário do crédito — exibe o 5º card apenas para admin. */
+  creditUnitCost?: number | null;
 };
 
-export function KpiCards({ kpis, activeFilter, onSelect, userRole }: Props) {
+type KpiItem = {
+  id: string;
+  label: string;
+  value: string;
+  hint: string;
+  Icon: LucideIcon;
+  tone: string;
+  glow: string;
+  ring: string;
+  filter: StatusFilter | null;
+  dot?: string;
+  alert?: boolean;
+  /** Ação ao lado do subtítulo (só em cards não clicáveis, para não aninhar botões). */
+  hintAction?: ReactNode;
+};
+
+/**
+ * Posição de cada card no layout do admin (5 cards), agrupando por assunto:
+ * - celular (2 col.): "Clientes ativos" na largura toda · vencendo + vencidos · receita + créditos;
+ * - tablet/desktop (6 col.): 3 cards de status em cima · 2 cards financeiros, mais largos, embaixo.
+ * `order` só reordena visualmente; os elementos focáveis seguem a mesma sequência no DOM.
+ */
+const ADMIN_LAYOUT: Record<string, string> = {
+  "kpi-active": "order-1 col-span-2",
+  "kpi-expiring": "order-2 md:col-span-2",
+  "kpi-expired": "order-3 md:col-span-2",
+  "kpi-revenue": "order-4 md:col-span-3",
+  "kpi-credits": "order-5 md:col-span-3",
+};
+
+export function KpiCards({ kpis, activeFilter, onSelect, userRole, creditUnitCost = null }: Props) {
   const isReseller = userRole === "reseller";
   const negativeBalance = kpis.monthlyRevenue < 0;
+  const showCredits = userRole === "admin" && creditUnitCost !== null;
 
-  const items = [
+  const items: KpiItem[] = [
     {
       id: "kpi-active",
       label: "Clientes ativos",
@@ -54,7 +91,7 @@ export function KpiCards({ kpis, activeFilter, onSelect, userRole }: Props) {
           id: "kpi-revenue",
           label: "Receita / Saldo líquido (R$)",
           value: formatCurrency(kpis.monthlyRevenue),
-          hint: "ativos − comissões − custos internos",
+          hint: "descontando comissões e custos",
           Icon: CircleDollarSign,
           tone: negativeBalance ? "text-destructive" : "text-success",
           glow: negativeBalance ? "from-destructive/20" : "from-success/20",
@@ -90,8 +127,32 @@ export function KpiCards({ kpis, activeFilter, onSelect, userRole }: Props) {
     },
   ];
 
+  if (showCredits) {
+    const n = kpis.payingActiveCount;
+    items.push({
+      id: "kpi-credits",
+      label: "Custo de créditos (R$)",
+      value: formatCurrency(getCreditsTotalCost(n, creditUnitCost)),
+      hint: `${n} cliente${n === 1 ? "" : "s"} × ${formatCurrency(creditUnitCost)}/crédito`,
+      Icon: Coins,
+      tone: "text-violet-300",
+      glow: "from-accent-violet/25",
+      ring: "ring-accent-violet/40",
+      filter: null,
+      hintAction: <CreditCostEditor value={creditUnitCost} payingActiveCount={n} />,
+    });
+  }
+
   return (
-    <section aria-label="Resumo" className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+    <section
+      aria-label="Resumo"
+      className={cn(
+        "grid grid-cols-2 gap-3 sm:gap-x-4",
+        // Admin (5 cards): grade de 6 colunas a partir do tablet → 3 cards de status em cima
+        // e 2 cards financeiros, mais largos, embaixo. Revendedor: 4 colunas como antes.
+        showCredits ? "md:grid-cols-6" : "lg:grid-cols-4",
+      )}
+    >
       {items.map((item, index) => {
         const clickable = item.filter !== null;
         const selected = clickable && item.filter !== "all" && activeFilter === item.filter;
@@ -105,9 +166,10 @@ export function KpiCards({ kpis, activeFilter, onSelect, userRole }: Props) {
             onClick={clickable ? () => onSelect(selected ? "all" : (item.filter as StatusFilter)) : undefined}
             style={{ animationDelay: `${index * 60}ms` }}
             className={cn(
-              "group relative overflow-hidden rounded-2xl border border-border/70 bg-card/60 p-4 text-left shadow-lg shadow-black/20 backdrop-blur-xl transition-all duration-300 animate-fade-up sm:p-5",
+              "group relative overflow-hidden rounded-2xl border border-border/70 bg-card/60 px-4 py-3 text-left shadow-lg shadow-black/20 backdrop-blur-xl transition-all duration-300 animate-fade-up sm:px-5 sm:py-3.5",
               clickable && "cursor-pointer hover:-translate-y-0.5 hover:border-border hover:bg-card/80",
               selected && `ring-2 ${item.ring}`,
+              showCredits && ADMIN_LAYOUT[item.id],
             )}
           >
             <div
@@ -118,11 +180,13 @@ export function KpiCards({ kpis, activeFilter, onSelect, userRole }: Props) {
                 item.alert ? "opacity-100" : "opacity-60",
               )}
             />
-            <div className="relative flex items-start justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground sm:text-sm">{item.label}</span>
+            <div className="relative flex items-start justify-between gap-3">
+              <span className="min-w-0 pt-0.5 text-xs leading-snug font-medium text-muted-foreground sm:text-sm">
+                {item.label}
+              </span>
               <span
                 className={cn(
-                  "relative grid size-8 shrink-0 place-items-center rounded-lg bg-background/60 ring-1 ring-border sm:size-9",
+                  "relative grid size-8 shrink-0 place-items-center rounded-lg bg-background/60 ring-1 ring-border",
                   item.tone,
                 )}
               >
@@ -135,10 +199,25 @@ export function KpiCards({ kpis, activeFilter, onSelect, userRole }: Props) {
                 )}
               </span>
             </div>
-            <p className={cn("relative mt-3 font-display text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl", item.alert && item.tone)}>
+            <p
+              className={cn(
+                "relative mt-1 font-display text-2xl font-semibold tracking-tight tabular-nums sm:text-[1.75rem]",
+                item.alert && item.tone,
+              )}
+            >
               {item.value}
             </p>
-            <p className="relative mt-1 truncate text-[11px] text-muted-foreground sm:text-xs">{item.hint}</p>
+            {/* Subtítulo quebra em até 2 linhas em vez de ser cortado com reticências. */}
+            {item.hintAction ? (
+              <div className="relative mt-1 flex min-w-0 items-start gap-1.5">
+                <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground sm:text-xs">{item.hint}</p>
+                {item.hintAction}
+              </div>
+            ) : (
+              <p className="relative mt-1 line-clamp-2 text-[11px] leading-snug text-muted-foreground sm:text-xs">
+                {item.hint}
+              </p>
+            )}
           </Comp>
         );
       })}
