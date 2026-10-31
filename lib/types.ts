@@ -1,15 +1,34 @@
+/**
+ * Cargo do usuário logado (coluna `public.admins.role`).
+ * - `admin`: vendedores principais — veem todos os clientes.
+ * - `reseller`: revendedor — vê apenas os próprios clientes (RLS por `owner_id`).
+ */
+export type UserRole = "admin" | "reseller";
+
+export const USER_ROLES = ["admin", "reseller"] as const satisfies readonly UserRole[];
+
+export function isUserRole(value: unknown): value is UserRole {
+  return typeof value === "string" && (USER_ROLES as readonly string[]).includes(value);
+}
+
 export type Customer = {
   id: string;
   name: string;
   phone: string | null;
   mac_address: string;
   app_name: string | null;
+  /** Pode ser negativo (somente admin) para lançar custo interno / desconto no saldo. */
   plan_value: number;
-  expires_at: string; // YYYY-MM-DD
+  expires_at: string; // YYYY-MM-DD — vencimento técnico do sinal da TV
   notes: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  owner_id: string | null;
+  /** `true` quando o cliente foi cadastrado pelo revendedor. */
+  is_reseller: boolean;
+  /** YYYY-MM-DD — data alternativa de pagamento (exclusivo admin). Sempre `null` para o revendedor. */
+  payment_date: string | null;
 };
 
 export type ActionResult<T = undefined> =

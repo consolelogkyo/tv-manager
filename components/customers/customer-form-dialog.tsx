@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useTransition } from "react";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Save, Star, UserPlus } from "lucide-react";
+import { CreditCard, Loader2, Save, Star, TrendingDown, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { createCustomer, updateCustomer } from "@/app/actions/customers";
 import { Button } from "@/components/ui/button";
@@ -18,16 +18,29 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { RESELLER_COMMISSION, RESELLER_DEFAULT_PLAN_VALUE } from "@/lib/business";
 import { addDaysISO, getTodayISO } from "@/lib/date";
-import { formatPhone, maskCurrency, maskMac, maskPhone, numberToCurrencyInput } from "@/lib/format";
-import type { AppSuggestion, Customer } from "@/lib/types";
+import {
+  formatCurrency,
+  formatPhone,
+  maskCurrency,
+  maskMac,
+  maskPhone,
+  maskSignedCurrency,
+  numberToCurrencyInput,
+  toggleCurrencySign,
+} from "@/lib/format";
+import type { AppSuggestion, Customer, UserRole } from "@/lib/types";
 import { normalizeText, shortBrandLabel } from "@/lib/tv-apps";
-import { customerFormSchema, type CustomerFormValues } from "@/lib/validations";
+import { getCustomerFormSchema, type CustomerFormValues } from "@/lib/validations";
 import { cn } from "@/lib/utils";
 
 const MAX_QUICK_SUGGESTIONS = 6;
 
-function getDefaults(customer: Customer | null): CustomerFormValues {
+/** Valor sugerido ao marcar "custo interno" com o campo vazio. */
+const DEFAULT_INTERNAL_COST = "-6,00";
+
+function getDefaults(customer: Customer | null, role: UserRole): CustomerFormValues {
   if (customer) {
     return {
       name: customer.name,
@@ -37,6 +50,7 @@ function getDefaults(customer: Customer | null): CustomerFormValues {
       plan_value: numberToCurrencyInput(customer.plan_value),
       expires_at: customer.expires_at,
       notes: customer.notes ?? "",
+      payment_date: role === "admin" ? (customer.payment_date ?? "") : "",
     };
   }
   return {
@@ -44,9 +58,10 @@ function getDefaults(customer: Customer | null): CustomerFormValues {
     phone: "",
     mac_address: "",
     app_name: "",
-    plan_value: "",
+    plan_value: role === "reseller" ? numberToCurrencyInput(RESELLER_DEFAULT_PLAN_VALUE) : "",
     expires_at: addDaysISO(getTodayISO(), 30),
     notes: "",
+    payment_date: "",
   };
 }
 
@@ -55,15 +70,20 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   customer: Customer | null;
   appSuggestions?: AppSuggestion[];
+  userRole: UserRole;
 };
 
-export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestions = [] }: Props) {
+export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestions = [], userRole }: Props) {
   const isEdit = Boolean(customer);
+  const isAdmin = userRole === "admin";
   const [pending, startTransition] = useTransition();
 
+  // Mesmo schema que o servidor usa para o cargo (o servidor revalida com o cargo lido do banco).
+  const schema = useMemo(() => getCustomerFormSchema(userRole), [userRole]);
+
   const form = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerFormSchema),
-    defaultValues: getDefaults(customer),
+    resolver: zodResolver(schema),
+    defaultValues: getDefaults(customer, userRole),
     mode: "onTouched",
   });
 
@@ -78,6 +98,8 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
   } = form;
 
   const appValue = watch("app_name") ?? "";
+  const planValue = watch("plan_value") ?? "";
+  const isInternalCost = isAdmin && planValue.trim().startsWith("-");
 
   // Chips rápidos: filtra pelo texto digitado; favoritos sempre no topo.
   const quickSuggestions = useMemo(() => {
@@ -90,10 +112,17 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
     setValue("app_name", name, { shouldDirty: true, shouldValidate: true, shouldTouch: true });
   }
 
+  /** Atalho do admin: alterna o sinal do valor (custo interno / desconto no saldo). */
+  function setInternalCost(negative: boolean) {
+    const unsigned = planValue.trim().replace(/^-+/, "");
+    const next = negative && unsigned === "" ? DEFAULT_INTERNAL_COST : toggleCurrencySign(planValue, negative);
+    setValue("plan_value", next, { shouldDirty: true, shouldValidate: true, shouldTouch: true });
+  }
+
   // Recarrega os valores sempre que o modal abre (novo cliente ou outro cliente).
   useEffect(() => {
-    if (open) reset(getDefaults(customer));
-  }, [open, customer, reset]);
+    if (open) reset(getDefaults(customer, userRole));
+  }, [open, customer, userRole, reset]);
 
   const onSubmit = handleSubmit((values) => {
     startTransition(async () => {
@@ -231,28 +260,68 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
               )}
             </Field>
 
-            <Field label="Valor do plano" htmlFor="customer-value" error={errors.plan_value?.message}>
+            <Field
+              label="Valor do plano"
+              htmlFor="customer-value"
+              error={errors.plan_value?.message}
+              hint={
+                isAdmin
+                  ? isInternalCost
+                    ? "Lançamento negativo: será abatido do saldo líquido."
+                    : undefined
+                  : `Sua comissão: ${formatCurrency(RESELLER_COMMISSION)} por cliente ativo.`
+              }
+            >
               <div className="relative">
-                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                <span
+                  className={cn(
+                    "pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm",
+                    isInternalCost ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
                   R$
                 </span>
                 <Input
                   id="customer-value"
-                  inputMode="numeric"
-                  placeholder="0,00"
+                  inputMode={isAdmin ? "decimal" : "numeric"}
+                  placeholder={isAdmin ? "0,00 ou -6,00" : "0,00"}
                   autoComplete="off"
-                  className="pl-10 tabular-nums"
+                  className={cn("pl-10 tabular-nums", isInternalCost && "text-destructive")}
                   aria-invalid={Boolean(errors.plan_value)}
-                  {...withMask(register("plan_value"), maskCurrency)}
+                  {...withMask(register("plan_value"), isAdmin ? maskSignedCurrency : maskCurrency)}
                 />
               </div>
+              {isAdmin && (
+                <label
+                  htmlFor="customer-internal-cost"
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors",
+                    isInternalCost
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-border/70 bg-card/40 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  )}
+                >
+                  <input
+                    id="customer-internal-cost"
+                    type="checkbox"
+                    checked={isInternalCost}
+                    onChange={(e) => setInternalCost(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 cursor-pointer accent-destructive"
+                  />
+                  <span className="flex items-start gap-1 leading-snug">
+                    <TrendingDown className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                    Lançar como Custo / Desconto no Saldo (Valor Negativo)
+                  </span>
+                </label>
+              )}
             </Field>
 
             <Field
               label="Vencimento"
               htmlFor="customer-expires"
               error={errors.expires_at?.message}
-              className="sm:col-span-2"
+              hint="Data em que o sinal da TV cai."
+              className={isAdmin ? undefined : "sm:col-span-2"}
             >
               <Input
                 id="customer-expires"
@@ -261,6 +330,28 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
                 {...register("expires_at")}
               />
             </Field>
+
+            {/* Exclusivo admin: o revendedor nunca vê nem envia este campo. */}
+            {isAdmin && (
+              <Field
+                label="Dia/Data do Pagamento"
+                htmlFor="customer-payment-date"
+                error={errors.payment_date?.message}
+                optional
+                hint="Só para casos isolados em que o cliente paga em data diferente do vencimento."
+              >
+                <div className="relative">
+                  <CreditCard className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="customer-payment-date"
+                    type="date"
+                    className="pl-9"
+                    aria-invalid={Boolean(errors.payment_date)}
+                    {...register("payment_date")}
+                  />
+                </div>
+              </Field>
+            )}
 
             <Field label="Observações" htmlFor="customer-notes" error={errors.notes?.message} optional className="sm:col-span-2">
               <Textarea
@@ -293,6 +384,7 @@ function Field({
   label,
   htmlFor,
   error,
+  hint,
   optional,
   className,
   children,
@@ -300,6 +392,7 @@ function Field({
   label: string;
   htmlFor: string;
   error?: string;
+  hint?: string;
   optional?: boolean;
   className?: string;
   children: React.ReactNode;
@@ -311,6 +404,7 @@ function Field({
         {optional && <span className="text-xs font-normal text-muted-foreground">(opcional)</span>}
       </Label>
       {children}
+      {hint && !error && <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>}
       {error && (
         <p role="alert" className="text-xs text-destructive animate-in fade-in slide-in-from-top-0.5">
           {error}

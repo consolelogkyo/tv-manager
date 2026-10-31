@@ -4,7 +4,7 @@ import { getTvApps } from "@/app/actions/tv-apps";
 import { AppHeader } from "@/components/dashboard/app-header";
 import { NotAuthorized } from "@/components/dashboard/not-authorized";
 import { TvAppsCatalog } from "@/components/tv-apps/tv-apps-catalog";
-import { createClient } from "@/utils/supabase/server";
+import { getAuthContext } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Apps & TVs · TV Manager",
@@ -13,14 +13,11 @@ export const metadata: Metadata = {
 
 export default async function AppsPage() {
   // Defesa em profundidade: o middleware já protege a rota, mas validamos de novo.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, role } = await getAuthContext();
   if (!user) redirect("/login");
 
-  const { data: isAdmin, error: adminError } = await supabase.rpc("is_admin");
-  if (adminError || isAdmin !== true) {
+  // Admins e revendedor têm acesso total ao catálogo; sem cargo válido → bloqueado.
+  if (!role) {
     return <NotAuthorized email={user.email ?? ""} />;
   }
 

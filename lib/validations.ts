@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { MAX_PLAN_VALUE, MIN_PLAN_VALUE } from "@/lib/business";
 import { isValidISODate } from "@/lib/date";
 import { MAC_REGEX, onlyDigits, parseCurrency } from "@/lib/format";
+import type { UserRole } from "@/lib/types";
 import { isSafeHttpUrl, normalizeUrlInput } from "@/lib/tv-apps";
 
 /**
@@ -8,8 +10,12 @@ import { isSafeHttpUrl, normalizeUrlInput } from "@/lib/tv-apps";
  * (servidor). Todos os campos são strings para que o tipo de entrada e saída
  * sejam idênticos; a normalização para o banco acontece em `toCustomerRow`.
  * O servidor SEMPRE revalida com este schema — a validação do cliente é só UX.
+ *
+ * As regras variam por cargo (`getCustomerFormSchema(role)`):
+ * - admin:    aceita valor negativo (custo interno / desconto) e `payment_date`.
+ * - reseller: valor não-negativo e `payment_date` é sempre descartado.
  */
-export const customerFormSchema = z.object({
+const baseCustomerShape = {
   name: z
     .string()
     .trim()
@@ -27,23 +33,59 @@ export const customerFormSchema = z.object({
     .toUpperCase()
     .regex(MAC_REGEX, "MAC inválido. Formato: 00:1A:2B:3C:4D:5E"),
   app_name: z.string().trim().max(60, "Máximo de 60 caracteres"),
-  plan_value: z
+  expires_at: z.string().refine(isValidISODate, "Data de vencimento inválida"),
+  notes: z.string().trim().max(1000, "Máximo de 1000 caracteres"),
+};
+
+function planValueSchema(min: number, message: string) {
+  return z
     .string()
     .trim()
     .min(1, "Informe o valor do plano")
     .refine((v) => {
       const n = parseCurrency(v);
-      return Number.isFinite(n) && n >= 0 && n <= 99_999_999.99;
-    }, "Valor inválido"),
-  expires_at: z.string().refine(isValidISODate, "Data de vencimento inválida"),
-  notes: z.string().trim().max(1000, "Máximo de 1000 caracteres"),
+      return Number.isFinite(n) && n >= min && n <= MAX_PLAN_VALUE;
+    }, message);
+}
+
+/** Schema dos admins principais: permite valores negativos e data de pagamento alternativa. */
+export const adminCustomerFormSchema = z.object({
+  ...baseCustomerShape,
+  plan_value: planValueSchema(MIN_PLAN_VALUE, "Valor inválido (mínimo -R$ 10.000,00)"),
+  payment_date: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || isValidISODate(v), "Data de pagamento inválida"),
 });
 
-export type CustomerFormValues = z.infer<typeof customerFormSchema>;
+/**
+ * Schema do revendedor: valor não-negativo. `payment_date` é exclusivo do admin,
+ * então qualquer valor enviado por um revendedor é descartado (vira "").
+ */
+export const resellerCustomerFormSchema = z.object({
+  ...baseCustomerShape,
+  plan_value: planValueSchema(0, "Valor inválido"),
+  payment_date: z
+    .string()
+    .optional()
+    .transform(() => ""),
+});
 
-export function toCustomerRow(values: CustomerFormValues) {
+export type CustomerFormValues = z.infer<typeof adminCustomerFormSchema>;
+
+/** Seleciona o schema pelo cargo. Ambos têm a mesma forma de entrada/saída. */
+export function getCustomerFormSchema(role: UserRole): z.ZodType<CustomerFormValues, CustomerFormValues> {
+  return role === "admin" ? adminCustomerFormSchema : (resellerCustomerFormSchema as z.ZodType<CustomerFormValues, CustomerFormValues>);
+}
+
+/**
+ * Converte o formulário validado em colunas do banco. `payment_date` só é
+ * incluído para admins — no UPDATE de um revendedor a coluna nem é tocada.
+ * `owner_id`/`is_reseller` NUNCA vêm daqui: são definidos no servidor no INSERT.
+ */
+export function toCustomerRow(values: CustomerFormValues, role: UserRole) {
   const phone = onlyDigits(values.phone);
-  return {
+  const row = {
     name: values.name,
     phone: phone || null,
     mac_address: values.mac_address.toUpperCase(),
@@ -52,6 +94,8 @@ export function toCustomerRow(values: CustomerFormValues) {
     expires_at: values.expires_at,
     notes: values.notes || null,
   };
+  if (role !== "admin") return row;
+  return { ...row, payment_date: values.payment_date || null };
 }
 
 export const customerIdSchema = z.string().uuid("ID inválido");

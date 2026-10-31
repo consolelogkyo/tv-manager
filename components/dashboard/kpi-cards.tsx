@@ -1,14 +1,17 @@
 "use client";
 
-import { AlertTriangle, CircleDollarSign, Users, XCircle } from "lucide-react";
+import { AlertTriangle, CircleDollarSign, HandCoins, Users, XCircle } from "lucide-react";
 import type { StatusFilter } from "@/components/customers/types";
+import { RESELLER_COMMISSION } from "@/lib/business";
 import { formatCurrency } from "@/lib/format";
+import type { UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type Kpis = {
   activeCount: number;
   expiringCount: number;
   expiredCount: number;
+  /** admin: saldo líquido · reseller: comissão total. */
   monthlyRevenue: number;
 };
 
@@ -16,9 +19,13 @@ type Props = {
   kpis: Kpis;
   activeFilter: StatusFilter;
   onSelect: (filter: StatusFilter) => void;
+  userRole: UserRole;
 };
 
-export function KpiCards({ kpis, activeFilter, onSelect }: Props) {
+export function KpiCards({ kpis, activeFilter, onSelect, userRole }: Props) {
+  const isReseller = userRole === "reseller";
+  const negativeBalance = kpis.monthlyRevenue < 0;
+
   const items = [
     {
       id: "kpi-active",
@@ -31,17 +38,30 @@ export function KpiCards({ kpis, activeFilter, onSelect }: Props) {
       ring: "ring-primary/40",
       filter: "all" as StatusFilter,
     },
-    {
-      id: "kpi-revenue",
-      label: "Receita mensal estimada",
-      value: formatCurrency(kpis.monthlyRevenue),
-      hint: "soma dos planos ativos",
-      Icon: CircleDollarSign,
-      tone: "text-success",
-      glow: "from-success/20",
-      ring: "ring-success/40",
-      filter: null,
-    },
+    isReseller
+      ? {
+          id: "kpi-commission",
+          label: "Sua comissão total (R$)",
+          value: formatCurrency(kpis.monthlyRevenue),
+          hint: `${formatCurrency(RESELLER_COMMISSION)} por cliente ativo`,
+          Icon: HandCoins,
+          tone: "text-success",
+          glow: "from-success/20",
+          ring: "ring-success/40",
+          filter: null,
+        }
+      : {
+          id: "kpi-revenue",
+          label: "Receita / Saldo líquido (R$)",
+          value: formatCurrency(kpis.monthlyRevenue),
+          hint: "ativos − comissões − custos internos",
+          Icon: CircleDollarSign,
+          tone: negativeBalance ? "text-destructive" : "text-success",
+          glow: negativeBalance ? "from-destructive/20" : "from-success/20",
+          ring: "ring-success/40",
+          filter: null,
+          alert: negativeBalance,
+        },
     {
       id: "kpi-expiring",
       label: "Vencendo em 3 dias",

@@ -55,6 +55,23 @@ export function maskCurrency(value: string): string {
   });
 }
 
+/**
+ * Igual a `maskCurrency`, mas preserva um "-" inicial (custos/descontos internos):
+ * "-600" → "-6,00". Um "-" sozinho é mantido para permitir continuar digitando.
+ */
+export function maskSignedCurrency(value: string): string {
+  const negative = value.trimStart().startsWith("-");
+  const masked = maskCurrency(value);
+  if (!negative) return masked;
+  return `-${masked}`;
+}
+
+/** Inverte o sinal de um valor já mascarado ("6,00" ⇄ "-6,00"). */
+export function toggleCurrencySign(value: string, negative: boolean): string {
+  const unsigned = value.trim().replace(/^-+/, "");
+  return negative ? `-${unsigned}` : unsigned;
+}
+
 /** "1.234,56" → 1234.56 */
 export function parseCurrency(value: string): number {
   const normalized = value.replace(/\./g, "").replace(",", ".").trim();
@@ -82,16 +99,18 @@ export function buildWhatsAppLink(params: {
 
   const firstName = params.name.trim().split(/\s+/)[0] ?? "";
   const date = formatDateBR(params.expiresAt);
+  // Lançamentos internos (valor ≤ 0) nunca devem expor valor negativo na mensagem.
+  const hasValue = params.planValue > 0;
   const value = formatCurrency(params.planValue);
 
   const message =
     params.daysRemaining < 0
       ? `Olá, ${firstName}! Tudo bem? Sua assinatura de TV venceu em ${date} (${describeDays(
           params.daysRemaining,
-        ).toLowerCase()}). Para reativar, o valor é ${value}. É só me responder por aqui que já libero pra você! 📺`
+        ).toLowerCase()}). ${hasValue ? `Para reativar, o valor é ${value}. ` : ""}É só me responder por aqui que já libero pra você! 📺`
       : `Olá, ${firstName}! Tudo bem? Passando para lembrar que sua assinatura de TV vence em ${date} (${describeDays(
           params.daysRemaining,
-        ).toLowerCase()}). O valor da renovação é ${value}. Quer que eu já renove pra você? 📺`;
+        ).toLowerCase()}). ${hasValue ? `O valor da renovação é ${value}. ` : ""}Quer que eu já renove pra você? 📺`;
 
   return `https://wa.me/${withCountry}?text=${encodeURIComponent(message)}`;
 }

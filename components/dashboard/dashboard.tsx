@@ -8,9 +8,10 @@ import type { EnrichedCustomer, StatusFilter } from "@/components/customers/type
 import { KpiCards, type Kpis } from "@/components/dashboard/kpi-cards";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getKpiContribution } from "@/lib/business";
 import { getDaysRemaining, getStatus } from "@/lib/date";
 import { onlyDigits } from "@/lib/format";
-import type { AppSuggestion, Customer } from "@/lib/types";
+import type { AppSuggestion, Customer, UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const FILTERS: { value: StatusFilter; label: string; dot?: string }[] = [
@@ -31,10 +32,12 @@ export function Dashboard({
   customers,
   today,
   appSuggestions = [],
+  userRole,
 }: {
   customers: Customer[];
   today: string;
   appSuggestions?: AppSuggestion[];
+  userRole: UserRole;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
@@ -53,6 +56,9 @@ export function Dashboard({
     [customers, today],
   );
 
+  // KPI financeiro depende do cargo:
+  // - reseller → comissão de R$ 10,00 por cliente ativo;
+  // - admin    → saldo líquido (comissão do revendedor e custos internos abatidos).
   const kpis = useMemo<Kpis>(() => {
     let activeCount = 0;
     let expiringCount = 0;
@@ -61,14 +67,14 @@ export function Dashboard({
     for (const c of enriched) {
       if (c.days >= 0) {
         activeCount += 1;
-        monthlyRevenue += c.plan_value;
+        monthlyRevenue += getKpiContribution(c, userRole);
       } else {
         expiredCount += 1;
       }
       if (c.status === "expiring") expiringCount += 1;
     }
     return { activeCount, expiringCount, expiredCount, monthlyRevenue: Math.round(monthlyRevenue * 100) / 100 };
-  }, [enriched]);
+  }, [enriched, userRole]);
 
   const counts = useMemo(() => {
     const result: Record<StatusFilter, number> = { all: enriched.length, active: 0, expiring: 0, expired: 0 };
@@ -104,7 +110,7 @@ export function Dashboard({
 
   return (
     <div className="space-y-6">
-      <KpiCards kpis={kpis} activeFilter={filter} onSelect={setFilter} />
+      <KpiCards kpis={kpis} activeFilter={filter} onSelect={setFilter} userRole={userRole} />
 
       <section aria-labelledby="customers-title" className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -189,7 +195,7 @@ export function Dashboard({
         </div>
 
         {filtered.length > 0 ? (
-          <CustomerList customers={filtered} onEdit={openEdit} />
+          <CustomerList customers={filtered} onEdit={openEdit} userRole={userRole} />
         ) : (
           <EmptyState hasCustomers={enriched.length > 0} onCreate={openCreate} onClear={() => { setQuery(""); setFilter("all"); }} />
         )}
@@ -211,6 +217,7 @@ export function Dashboard({
         onOpenChange={setFormOpen}
         customer={editing}
         appSuggestions={appSuggestions}
+        userRole={userRole}
       />
     </div>
   );

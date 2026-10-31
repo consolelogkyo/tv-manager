@@ -2,6 +2,7 @@
 
 import { AppWindow, CalendarDays, Pencil, StickyNote } from "lucide-react";
 import { CopyMacButton } from "@/components/customers/copy-mac-button";
+import { CustomerTags, PaymentDateTag, PlanValueInfo } from "@/components/customers/customer-value";
 import { DeleteButton } from "@/components/customers/delete-button";
 import { RenewButton } from "@/components/customers/renew-button";
 import { StatusBadge } from "@/components/customers/status-badge";
@@ -10,12 +11,13 @@ import { WhatsAppLink } from "@/components/customers/whatsapp-link";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { describeDays, formatDateBR } from "@/lib/date";
-import { formatCurrency } from "@/lib/format";
+import type { UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
   customers: EnrichedCustomer[];
   onEdit: (customer: EnrichedCustomer) => void;
+  userRole: UserRole;
 };
 
 const DAYS_TONE = {
@@ -46,18 +48,19 @@ function EditButton({ customer, onEdit }: { customer: EnrichedCustomer; onEdit: 
   );
 }
 
-function ExpiryInfo({ customer }: { customer: EnrichedCustomer }) {
+function ExpiryInfo({ customer, userRole }: { customer: EnrichedCustomer; userRole: UserRole }) {
   return (
     <div className="flex flex-col">
       <span className="font-medium tabular-nums">{formatDateBR(customer.expires_at)}</span>
       <span className={cn("text-xs", DAYS_TONE[customer.status])}>{describeDays(customer.days)}</span>
+      <PaymentDateTag customer={customer} userRole={userRole} />
     </div>
   );
 }
 
 /* --------------------------------------------------------------- Desktop --- */
 
-function DesktopTable({ customers, onEdit }: Props) {
+function DesktopTable({ customers, onEdit, userRole }: Props) {
   return (
     <div className="hidden overflow-hidden rounded-2xl border border-border/70 bg-card/60 shadow-xl shadow-black/20 backdrop-blur-xl md:block">
       <Table>
@@ -66,7 +69,7 @@ function DesktopTable({ customers, onEdit }: Props) {
             <TableHead>Cliente</TableHead>
             <TableHead>MAC Address</TableHead>
             <TableHead>Aplicativo</TableHead>
-            <TableHead className="text-right">Valor mensal</TableHead>
+            <TableHead className="text-right">{userRole === "admin" ? "Valor líquido" : "Valor mensal"}</TableHead>
             <TableHead>Vencimento</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Ações</TableHead>
@@ -77,12 +80,12 @@ function DesktopTable({ customers, onEdit }: Props) {
             <TableRow key={customer.id}>
               <TableCell
                 className={cn(
-                  "relative max-w-[240px] before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-r-full",
+                  "relative max-w-[280px] before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-r-full",
                   ROW_ACCENT[customer.status],
                 )}
               >
                 <div className="flex flex-col gap-0.5">
-                  <span className="flex items-center gap-1.5 truncate font-medium">
+                  <span className="flex min-w-0 flex-wrap items-center gap-1.5 font-medium">
                     <span className="truncate">{customer.name}</span>
                     {customer.notes && (
                       <span title={customer.notes} className="text-muted-foreground">
@@ -90,6 +93,7 @@ function DesktopTable({ customers, onEdit }: Props) {
                         <span className="sr-only">Possui observações</span>
                       </span>
                     )}
+                    <CustomerTags customer={customer} userRole={userRole} />
                   </span>
                   <WhatsAppLink customer={customer} />
                 </div>
@@ -98,9 +102,11 @@ function DesktopTable({ customers, onEdit }: Props) {
                 <CopyMacButton id={`copy-mac-${customer.id}`} value={customer.mac_address} />
               </TableCell>
               <TableCell className="text-muted-foreground">{customer.app_name || "—"}</TableCell>
-              <TableCell className="text-right font-medium tabular-nums">{formatCurrency(customer.plan_value)}</TableCell>
+              <TableCell className="text-right">
+                <PlanValueInfo customer={customer} userRole={userRole} />
+              </TableCell>
               <TableCell>
-                <ExpiryInfo customer={customer} />
+                <ExpiryInfo customer={customer} userRole={userRole} />
               </TableCell>
               <TableCell>
                 <StatusBadge status={customer.status} days={customer.days} />
@@ -122,7 +128,7 @@ function DesktopTable({ customers, onEdit }: Props) {
 
 /* ---------------------------------------------------------------- Mobile --- */
 
-function MobileList({ customers, onEdit }: Props) {
+function MobileList({ customers, onEdit, userRole }: Props) {
   return (
     <ul className="grid gap-3 md:hidden">
       {customers.map((customer) => (
@@ -137,6 +143,9 @@ function MobileList({ customers, onEdit }: Props) {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">{customer.name}</p>
+              <div className="mt-1 empty:hidden">
+                <CustomerTags customer={customer} userRole={userRole} />
+              </div>
               <WhatsAppLink customer={customer} />
             </div>
             <StatusBadge status={customer.status} days={customer.days} />
@@ -145,11 +154,11 @@ function MobileList({ customers, onEdit }: Props) {
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div className="flex items-start gap-2">
               <CalendarDays className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <ExpiryInfo customer={customer} />
+              <ExpiryInfo customer={customer} userRole={userRole} />
             </div>
-            <div className="text-right">
-              <p className="font-display text-lg font-semibold tabular-nums">{formatCurrency(customer.plan_value)}</p>
-              <p className="flex items-center justify-end gap-1 truncate text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-col items-end gap-1 text-right">
+              <PlanValueInfo customer={customer} userRole={userRole} size="lg" />
+              <p className="flex max-w-full items-center justify-end gap-1 truncate text-xs text-muted-foreground">
                 <AppWindow className="size-3.5 shrink-0" />
                 <span className="truncate">{customer.app_name || "Sem app"}</span>
               </p>
