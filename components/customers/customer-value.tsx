@@ -1,7 +1,7 @@
-import { CreditCard, Store, TrendingDown } from "lucide-react";
+import { AlertTriangle, CreditCard, Home, Server, Store } from "lucide-react";
 import type { EnrichedCustomer } from "@/components/customers/types";
 import { Badge } from "@/components/ui/badge";
-import { RESELLER_COMMISSION, getNetValueForHouse, isInternalCost } from "@/lib/business";
+import { RESELLER_COMMISSION, getNetValueForHouse, isInternalCustomer } from "@/lib/business";
 import { formatDateBR } from "@/lib/date";
 import { formatCurrency } from "@/lib/format";
 import type { UserRole } from "@/lib/types";
@@ -9,27 +9,40 @@ import { cn } from "@/lib/utils";
 
 /**
  * Tags exibidas ao lado do nome do cliente (somente visão admin):
+ * - painel/servidor (ou aviso "Sem painel");
  * - "Revendedor" para clientes cadastrados pelo revendedor;
- * - "Desconto / Custo Interno" para lançamentos com valor negativo.
+ * - "Uso interno" para acessos da casa (novo campo ou valor negativo legado).
  */
 export function CustomerTags({ customer, userRole }: { customer: EnrichedCustomer; userRole: UserRole }) {
   if (userRole !== "admin") return null;
-  const reseller = customer.is_reseller;
-  const cost = isInternalCost(customer);
-  if (!reseller && !cost) return null;
+  const internal = isInternalCustomer(customer);
 
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
-      {reseller && (
-        <Badge variant="violet" className="px-2 text-[10px] sm:text-[11px]">
+      {customer.panel ? (
+        <Badge
+          variant="outline"
+          title={`Painel ${customer.panel.name} — ${formatCurrency(customer.panel.credit_cost)}/crédito`}
+        >
+          <Server />
+          {customer.panel.name}
+        </Badge>
+      ) : (
+        <Badge variant="warning" title="Defina o painel ao editar o cliente">
+          <AlertTriangle />
+          Sem painel
+        </Badge>
+      )}
+      {customer.is_reseller && (
+        <Badge variant="default">
           <Store />
           Revendedor
         </Badge>
       )}
-      {cost && (
-        <Badge variant="danger" className="px-2 text-[10px] sm:text-[11px]">
-          <TrendingDown />
-          Desconto / Custo Interno
+      {internal && (
+        <Badge variant="default">
+          <Home />
+          Uso interno
         </Badge>
       )}
     </span>
@@ -39,8 +52,8 @@ export function CustomerTags({ customer, userRole }: { customer: EnrichedCustome
 /**
  * Valor exibido na coluna/card de valor, conforme o cargo:
  * - reseller → valor pago pelo cliente + "Sua comissão: R$ 10,00";
- * - admin    → valor líquido para a casa (cliente do revendedor = bruto − R$ 10)
- *              e custos internos em vermelho.
+ * - admin    → valor líquido para a casa (cliente do revendedor = bruto − R$ 10);
+ *              uso interno mostra o custo do crédito do painel.
  */
 export function PlanValueInfo({
   customer,
@@ -55,7 +68,7 @@ export function PlanValueInfo({
 }) {
   const valueClass = cn(
     "tabular-nums",
-    size === "lg" ? "font-display text-lg font-semibold" : "font-medium",
+    size === "lg" ? "text-base font-medium" : "font-medium",
   );
   const wrapperClass = cn("flex flex-col gap-0.5", align === "right" ? "items-end text-right" : "items-start text-left");
 
@@ -63,7 +76,7 @@ export function PlanValueInfo({
     return (
       <div className={wrapperClass}>
         <span className={valueClass}>{formatCurrency(customer.plan_value)}</span>
-        <span className="inline-flex items-center rounded-md bg-success/12 px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-success ring-1 ring-success/25">
+        <span className="text-[11px] whitespace-nowrap text-success">
           Sua comissão: {formatCurrency(RESELLER_COMMISSION)}
         </span>
       </div>
@@ -71,14 +84,21 @@ export function PlanValueInfo({
   }
 
   const net = getNetValueForHouse(customer);
+  const internal = isInternalCustomer(customer);
   return (
     <div className={wrapperClass}>
       <span className={cn(valueClass, net < 0 && "text-destructive")}>{formatCurrency(net)}</span>
-      {customer.is_reseller && (
-        <span className="text-[11px] leading-tight text-muted-foreground">
-          <span className="whitespace-nowrap">Bruto: {formatCurrency(customer.plan_value)}</span>{" "}
-          <span className="whitespace-nowrap">(−{formatCurrency(RESELLER_COMMISSION)} comissão)</span>
+      {internal ? (
+        <span className="text-[11px] leading-tight whitespace-nowrap text-subtle-foreground">
+          {customer.panel ? `Custo: −${formatCurrency(customer.panel.credit_cost)}/crédito` : "Sem faturamento"}
         </span>
+      ) : (
+        customer.is_reseller && (
+          <span className="text-[11px] leading-tight text-subtle-foreground">
+            <span className="whitespace-nowrap">Bruto: {formatCurrency(customer.plan_value)}</span>{" "}
+            <span className="whitespace-nowrap">(−{formatCurrency(RESELLER_COMMISSION)} comissão)</span>
+          </span>
+        )
       )}
     </div>
   );
@@ -90,7 +110,7 @@ export function PaymentDateTag({ customer, userRole }: { customer: EnrichedCusto
   return (
     <span
       title="Data alternativa de pagamento (o sinal da TV segue o vencimento)"
-      className="mt-1 inline-flex w-fit flex-wrap items-center gap-x-1 rounded-md bg-primary/12 px-1.5 py-0.5 text-[11px] font-medium text-primary ring-1 ring-primary/25"
+      className="mt-1 inline-flex w-fit flex-wrap items-center gap-x-1 text-[11px] text-muted-foreground"
     >
       <CreditCard className="size-3 shrink-0" aria-hidden="true" />
       <span>Paga dia:</span>

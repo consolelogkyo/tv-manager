@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { redirect } from "next/navigation";
 import { isUserRole, type UserRole } from "@/lib/types";
 import { createClient } from "@/utils/supabase/server";
 
@@ -42,5 +43,40 @@ export const getAuthContext = cache(async () => {
 export async function getCurrentUserRole(): Promise<UserRole | null> {
   const { role } = await getAuthContext();
   return role;
+}
+
+/**
+ * Guarda das áreas financeiras (página `/finance` e Server Actions de painéis,
+ * despesas e Livro-Razão). Fail-closed:
+ * - sem sessão → `/login`;
+ * - qualquer cargo diferente de `admin` (inclusive revendedor) → `/`.
+ */
+export async function requireAdminOrRedirect() {
+  const ctx = await getAuthContext();
+  if (!ctx.user) redirect("/login");
+  if (ctx.role !== "admin") redirect("/");
+  return { supabase: ctx.supabase, user: ctx.user };
+}
+
+type QueryPage = PromiseLike<{ data: unknown[] | null; error: { code?: string; message?: string } | null }>;
+
+/**
+ * Lê todas as linhas de uma consulta em páginas (o PostgREST limita cada
+ * resposta, por padrão a 1000 linhas). `maxPages` evita laços infinitos.
+ */
+export async function fetchAllRows(
+  build: (from: number, to: number) => QueryPage,
+  { pageSize = 1000, maxPages = 50 }: { pageSize?: number; maxPages?: number } = {},
+): Promise<{ data: Record<string, unknown>[]; error: { code?: string; message?: string } | null }> {
+  const rows: Record<string, unknown>[] = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const from = page * pageSize;
+    const { data, error } = await build(from, from + pageSize - 1);
+    if (error) return { data: rows, error };
+    const chunk = (data ?? []) as Record<string, unknown>[];
+    rows.push(...chunk);
+    if (chunk.length < pageSize) break;
+  }
+  return { data: rows, error: null };
 }
 

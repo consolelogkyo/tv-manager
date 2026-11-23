@@ -1,13 +1,14 @@
 "use client";
 
 import { useDeferredValue, useMemo, useOptimistic, useState, useTransition } from "react";
-import { AppWindow, Layers, Plus, Search, SearchX, Star, Tv, X } from "lucide-react";
+import { AppWindow, Plus, Search, SearchX, Star, Tv, X } from "lucide-react";
 import { toast } from "sonner";
 import { changePriorityTvApp, toggleFavoriteTvApp } from "@/app/actions/tv-apps";
 import { PRIORITY_DOT } from "@/components/tv-apps/badges";
 import { TvAppCard } from "@/components/tv-apps/tv-app-card";
 import { TvAppFormDialog } from "@/components/tv-apps/tv-app-form-dialog";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Input } from "@/components/ui/input";
 import { collectBrands, compareTvApps, normalizeText, PRESET_TV_BRANDS, PRIORITY_META, shortBrandLabel } from "@/lib/tv-apps";
 import type { PriorityDirection, TvApp, TvAppPriority } from "@/lib/types";
@@ -130,16 +131,16 @@ export function TvAppsCatalog({ apps }: { apps: TvApp[] }) {
     <div className="space-y-6">
       {/* Resumo */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard icon={AppWindow} label="Apps no catálogo" value={stats.total} tone="primary" />
-        <StatCard icon={Star} label="Favoritos" value={stats.favorites} tone="warning" />
-        <StatCard icon={Tv} label="Marcas com apps" value={stats.brands} tone="violet" />
-        <StatCard icon={Layers} label="1ª opção" value={stats.firstChoice} tone="success" />
+        <StatCard label="Apps no catálogo" value={stats.total} />
+        <StatCard label="Favoritos" value={stats.favorites} />
+        <StatCard label="Marcas com apps" value={stats.brands} />
+        <StatCard label="Apps de 1ª opção" value={stats.firstChoice} />
       </div>
 
       <section aria-labelledby="tv-apps-title" className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 id="tv-apps-title" className="font-display text-xl font-semibold tracking-tight">
+            <h2 id="tv-apps-title" className="text-lg font-medium">
               Fila de apps por TV
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -180,7 +181,7 @@ export function TvAppsCatalog({ apps }: { apps: TvApp[] }) {
         {/* Busca + favoritos */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle-foreground" strokeWidth={1.75} />
             <Input
               id="tv-app-search"
               type="search"
@@ -188,7 +189,7 @@ export function TvAppsCatalog({ apps }: { apps: TvApp[] }) {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar app pelo nome..."
               aria-label="Buscar apps"
-              className="h-11 pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
+              className="pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
               autoComplete="off"
               spellCheck={false}
             />
@@ -198,7 +199,7 @@ export function TvAppsCatalog({ apps }: { apps: TvApp[] }) {
                 id="tv-app-clear-search"
                 onClick={() => setQuery("")}
                 aria-label="Limpar busca"
-                className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer rounded-md p-1.5 text-subtle-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <X className="size-4" />
               </button>
@@ -210,19 +211,20 @@ export function TvAppsCatalog({ apps }: { apps: TvApp[] }) {
             aria-pressed={favoritesOnly}
             onClick={() => setFavoritesOnly((v) => !v)}
             className={cn(
-              "inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-4 text-sm font-medium transition-all active:scale-[0.97]",
+              "inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-4 text-sm font-medium transition-colors duration-150 active:scale-[0.98]",
               favoritesOnly
-                ? "border-warning/50 bg-warning/15 text-warning shadow-sm shadow-warning/20"
-                : "border-border/70 bg-card/50 text-muted-foreground hover:bg-muted hover:text-foreground",
+                ? "border-border bg-muted text-foreground"
+                : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
-            <Star className={cn("size-4", favoritesOnly && "fill-current")} />
+            <Star className={cn("size-4", favoritesOnly && "fill-warning text-warning")} strokeWidth={1.75} />
             Apenas favoritos
           </button>
         </div>
 
         {/* Legenda */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <InfoTip term="appPriority" align="start" />
           {([1, 2, 3] as const).map((p) => (
             <span key={p} className="inline-flex items-center gap-1.5">
               <span className={cn("size-2 rounded-full", PRIORITY_DOT[p])} />
@@ -262,7 +264,7 @@ export function TvAppsCatalog({ apps }: { apps: TvApp[] }) {
         onClick={() => openCreate()}
         size="lg"
         aria-label="Adicionar app"
-        className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 size-14 rounded-full p-0 shadow-2xl shadow-primary/40 sm:hidden"
+        className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 size-14 rounded-full p-0 shadow-lg shadow-black/50 sm:hidden"
       >
         <Plus className="size-6" />
       </Button>
@@ -302,16 +304,14 @@ function BrandSection({
   return (
     <section
       aria-label={brand}
-      className="flex flex-col rounded-2xl border border-border/70 bg-card/60 p-4 shadow-xl shadow-black/10 backdrop-blur-xl animate-fade-up sm:p-5"
+      className="flex flex-col rounded-xl border border-border bg-card p-4 sm:p-5"
       style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
     >
       <header className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary/30 to-accent-violet/20 ring-1 ring-primary/30">
-            <Tv className="size-5 text-primary" />
-          </div>
+          <Tv className="size-4 shrink-0 text-subtle-foreground" strokeWidth={1.75} aria-hidden="true" />
           <div className="min-w-0">
-            <h3 className="truncate font-display text-base font-semibold leading-tight">{brand}</h3>
+            <h3 className="truncate text-[15px] leading-tight font-medium">{brand}</h3>
             <p className="text-xs text-muted-foreground">
               {apps.length} app{apps.length === 1 ? "" : "s"}
               {favorites > 0 && (
@@ -329,7 +329,7 @@ function BrandSection({
           variant="ghost"
           size="sm"
           onClick={onAdd}
-          className="shrink-0 text-muted-foreground hover:text-primary"
+          className="shrink-0 text-muted-foreground"
           aria-label={`Adicionar app em ${brand}`}
         >
           <Plus /> <span className="hidden sm:inline">Adicionar</span>
@@ -376,52 +376,25 @@ function BrandChip({
       title={title}
       onClick={onClick}
       className={cn(
-        "inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-all active:scale-[0.97]",
+        "inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md border px-3 text-[13px] font-medium transition-colors duration-150",
         selected
-          ? "border-primary/50 bg-gradient-to-r from-primary/25 to-accent-violet/20 text-foreground shadow-sm shadow-primary/25"
-          : "border-border/60 bg-card/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+          ? "border-primary/70 bg-muted text-foreground"
+          : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground",
       )}
     >
       {label}
-      <span
-        className={cn(
-          "rounded-full px-1.5 py-0.5 text-[11px] tabular-nums",
-          selected ? "bg-primary/30 text-foreground" : "bg-muted text-muted-foreground",
-        )}
-      >
+      <span className="font-mono text-[11px] text-subtle-foreground tabular-nums">
         {count}
       </span>
     </button>
   );
 }
 
-const STAT_TONES = {
-  primary: "from-primary/25 to-primary/5 text-primary ring-primary/30",
-  warning: "from-warning/25 to-warning/5 text-warning ring-warning/30",
-  violet: "from-accent-violet/25 to-accent-violet/5 text-accent-violet ring-accent-violet/30",
-  success: "from-success/25 to-success/5 text-success ring-success/30",
-} as const;
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: number;
-  tone: keyof typeof STAT_TONES;
-}) {
+function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card/60 p-3.5 backdrop-blur-xl animate-fade-up sm:p-4">
-      <div className={cn("grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br ring-1", STAT_TONES[tone])}>
-        <Icon className="size-5" />
-      </div>
-      <div className="min-w-0">
-        <p className="font-display text-xl font-semibold tabular-nums leading-tight">{value}</p>
-        <p className="truncate text-xs text-muted-foreground">{label}</p>
-      </div>
+    <div className="rounded-xl border border-border bg-card px-4 py-3.5 sm:px-5">
+      <p className="text-[13px] text-muted-foreground">{label}</p>
+      <p className="mt-1.5 text-2xl font-medium tabular-nums">{value}</p>
     </div>
   );
 }
@@ -441,11 +414,9 @@ function EmptyState({
 }) {
   const filtered = hasApps && hasFilters;
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/40 px-6 py-14 text-center backdrop-blur animate-fade-up">
-      <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-muted/60 ring-1 ring-border">
-        {filtered ? <SearchX className="size-6 text-muted-foreground" /> : <AppWindow className="size-6 text-primary" />}
-      </div>
-      <h3 className="font-display text-lg font-semibold">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 py-14 text-center">
+      <div className="mb-3 text-subtle-foreground">{filtered ? <SearchX className="size-6 text-subtle-foreground" strokeWidth={1.5} /> : <AppWindow className="size-6 text-subtle-foreground" strokeWidth={1.5} />}</div>
+      <h3 className="text-base font-medium">
         {filtered ? "Nenhum app encontrado" : brand ? `Nenhum app para ${shortBrandLabel(brand)}` : "Catálogo vazio"}
       </h3>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">

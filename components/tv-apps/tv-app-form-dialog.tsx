@@ -123,8 +123,8 @@ export function TvAppFormDialog({ open, onOpenChange, app, brands, defaultBrand,
     <Dialog open={open} onOpenChange={(v) => !pending && onOpenChange(v)}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-display">
-            {isEdit ? <Save className="size-5 text-primary" /> : <AppWindow className="size-5 text-primary" />}
+          <DialogTitle className="flex items-center gap-2">
+            {isEdit ? <Save className="size-4 text-muted-foreground" strokeWidth={1.75} /> : <AppWindow className="size-4 text-muted-foreground" strokeWidth={1.75} />}
             {isEdit ? "Editar app" : "Adicionar app ao catálogo"}
           </DialogTitle>
           <DialogDescription>
@@ -144,8 +144,8 @@ export function TvAppFormDialog({ open, onOpenChange, app, brands, defaultBrand,
                   onChange={(e) => onBrandSelect(e.target.value)}
                   aria-invalid={Boolean(errors.tv_brand)}
                   className={cn(
-                    "flex h-10 w-full rounded-lg border border-input bg-background/60 px-3 text-base shadow-xs outline-none transition-[color,box-shadow,border-color] md:text-sm [color-scheme:dark] cursor-pointer",
-                    "focus-visible:border-primary/70 focus-visible:ring-[3px] focus-visible:ring-primary/20",
+                    "flex h-10 w-full cursor-pointer rounded-lg border border-input bg-background px-3 text-base outline-none transition-[color,border-color] md:text-sm [color-scheme:dark]",
+                    "focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25",
                     "aria-invalid:border-destructive",
                   )}
                 >
@@ -209,7 +209,7 @@ export function TvAppFormDialog({ open, onOpenChange, app, brands, defaultBrand,
             </Field>
 
             <fieldset className="space-y-1.5 sm:col-span-2">
-              <legend className="mb-1.5 text-sm font-medium text-foreground/90">Posição na fila</legend>
+              <legend className="mb-1.5 text-sm font-medium">Posição na fila</legend>
               <div className="grid grid-cols-3 gap-2">
                 {PRIORITIES.map((p) => {
                   const checked = priorityValue === String(p);
@@ -218,14 +218,8 @@ export function TvAppFormDialog({ open, onOpenChange, app, brands, defaultBrand,
                       key={p}
                       htmlFor={`tv-app-priority-${p}`}
                       className={cn(
-                        "flex cursor-pointer flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 transition-all",
-                        checked
-                          ? p === 1
-                            ? "border-success/50 bg-success/12 ring-1 ring-success/30"
-                            : p === 2
-                              ? "border-sky-400/50 bg-sky-400/12 ring-1 ring-sky-400/30"
-                              : "border-muted-foreground/40 bg-muted/60 ring-1 ring-border"
-                          : "border-border/70 bg-background/40 hover:bg-muted/50",
+                        "flex cursor-pointer flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 transition-colors duration-150",
+                        checked ? "border-primary/60 bg-muted" : "border-border bg-background hover:bg-muted/50",
                       )}
                     >
                       <input
@@ -235,11 +229,11 @@ export function TvAppFormDialog({ open, onOpenChange, app, brands, defaultBrand,
                         className="sr-only"
                         {...register("priority")}
                       />
-                      <span className="flex items-center gap-1.5 text-sm font-semibold">
+                      <span className="flex items-center gap-1.5 text-sm font-medium">
                         <span className={cn("size-2 rounded-full", PRIORITY_DOT[p])} />
                         {PRIORITY_META[p].label}
                       </span>
-                      <span className="text-[11px] text-muted-foreground">{PRIORITY_META[p].hint}</span>
+                      <span className="text-[11px] text-subtle-foreground">{PRIORITY_META[p].hint}</span>
                     </label>
                   );
                 })}
@@ -269,24 +263,24 @@ export function TvAppFormDialog({ open, onOpenChange, app, brands, defaultBrand,
             </Field>
 
             <div className="space-y-1.5">
-              <span className="flex text-sm font-medium leading-none text-foreground/90">Favorito</span>
+              <span className="flex text-sm leading-none font-medium">Favorito</span>
               <label
                 htmlFor="tv-app-favorite"
                 className={cn(
-                  "flex h-10 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 transition-all",
-                  isFavorite ? "border-warning/40 bg-warning/10" : "border-input bg-background/60 hover:bg-muted/50",
+                  "flex h-10 cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 transition-colors",
+                  "border-input bg-background hover:bg-muted/50",
                 )}
               >
-                <span className={cn("flex items-center gap-2 text-sm", isFavorite ? "text-warning" : "text-muted-foreground")}>
-                  <Star className={cn("size-4", isFavorite && "fill-current")} />
-                  {isFavorite ? "Favorito ⭐" : "Marcar como favorito"}
+                <span className={cn("flex items-center gap-2 text-sm", isFavorite ? "text-foreground" : "text-muted-foreground")}>
+                  <Star className={cn("size-4", isFavorite && "fill-warning text-warning")} strokeWidth={1.75} />
+                  {isFavorite ? "Favorito" : "Marcar como favorito"}
                 </span>
                 <input id="tv-app-favorite" type="checkbox" role="switch" className="peer sr-only" {...register("is_favorite")} />
                 <span
                   aria-hidden
                   className={cn(
                     "relative h-5 w-9 shrink-0 rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring",
-                    isFavorite ? "bg-warning" : "bg-muted",
+                    isFavorite ? "bg-primary" : "bg-muted",
                   )}
                 >
                   <span
@@ -369,7 +363,7 @@ function Field({
       </Label>
       {children}
       {error && (
-        <p role="alert" className="text-xs text-destructive animate-in fade-in slide-in-from-top-0.5">
+        <p role="alert" className="text-xs text-destructive">
           {error}
         </p>
       )}

@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import type { EnrichedCustomer } from "@/components/customers/types";
 
-export function DeleteButton({ customer }: { customer: EnrichedCustomer }) {
+export function DeleteButton({ customer, full = false }: { customer: EnrichedCustomer; full?: boolean }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -39,27 +39,29 @@ export function DeleteButton({ customer }: { customer: EnrichedCustomer }) {
         <Button
           id={`delete-${customer.id}`}
           variant="ghost"
-          size="icon-sm"
-          className="text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
-          aria-label={`Excluir ${customer.name}`}
-          title="Excluir"
+          size={full ? "sm" : "icon-sm"}
+          className="text-muted-foreground hover:text-destructive"
+          aria-label={`Excluir permanentemente ${customer.name}`}
+          title="Excluir permanentemente (cadastro errado)"
         >
           <Trash2 />
+          {full && "Excluir"}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Excluir cliente?</AlertDialogTitle>
+          <AlertDialogTitle>Excluir permanentemente</AlertDialogTitle>
           <AlertDialogDescription>
             <strong className="text-foreground">{customer.name}</strong> ({customer.mac_address}) será removido
-            permanentemente. Esta ação não pode ser desfeita.
+            permanentemente. Use apenas para cadastros feitos por engano — se o cliente saiu, prefira{" "}
+            <strong className="text-foreground">Cancelar / Churn</strong> para manter o histórico.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
           <Button id={`confirm-delete-${customer.id}`} variant="destructive" onClick={handleDelete} disabled={pending}>
             {pending ? <Loader2 className="animate-spin" /> : <Trash2 />}
-            Excluir
+            Excluir permanentemente
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -4,7 +4,7 @@ import type { EnrichedCustomer } from "@/components/customers/types";
 
 export function WhatsAppLink({ customer }: { customer: EnrichedCustomer }) {
   if (!customer.phone) {
-    return <span className="text-xs text-muted-foreground/70">Sem WhatsApp</span>;
+    return <span className="text-xs text-subtle-foreground">Sem WhatsApp</span>;
   }
 
   const href = buildWhatsAppLink({
@@ -24,9 +24,9 @@ export function WhatsAppLink({ customer }: { customer: EnrichedCustomer }) {
       target="_blank"
       rel="noopener noreferrer"
       title="Enviar lembrete pelo WhatsApp"
-      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition hover:text-success"
+      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
     >
-      <MessageCircle className="size-3.5" />
+      <MessageCircle className="size-3.5" strokeWidth={1.75} />
       {label}
     </a>
   );

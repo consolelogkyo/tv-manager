@@ -1,19 +1,36 @@
 import { z } from "zod";
-import { MAX_CREDIT_UNIT_COST, MAX_PLAN_VALUE, MIN_CREDIT_UNIT_COST, MIN_PLAN_VALUE } from "@/lib/business";
+import { MAX_CREDIT_UNIT_COST, MAX_PLAN_VALUE } from "@/lib/business";
 import { isValidISODate } from "@/lib/date";
 import { MAC_REGEX, onlyDigits, parseCurrency } from "@/lib/format";
-import type { UserRole } from "@/lib/types";
+import { CREDIT_SOURCE_MODES, type UserRole } from "@/lib/types";
 import { isSafeHttpUrl, normalizeUrlInput } from "@/lib/tv-apps";
+
+/** UUID opcional vindo de um `<select>` ("" = nenhum). */
+export const optionalUuidSchema = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || z.string().uuid().safeParse(v).success, "Seleção inválida");
+
+export const creditSourceModeSchema = z.enum(CREDIT_SOURCE_MODES);
+
+export const optionalUnitCostSchema = z
+  .string()
+  .trim()
+  .refine((v) => {
+    if (v === "") return true;
+    const n = parseCurrency(v);
+    return Number.isFinite(n) && n >= 0 && n <= MAX_CREDIT_UNIT_COST;
+  }, "Custo do crédito inválido (R$ 0,00 a R$ 1.000,00)");
 
 /**
  * Schema compartilhado entre o formulário (cliente) e as Server Actions
- * (servidor). Todos os campos são strings para que o tipo de entrada e saída
- * sejam idênticos; a normalização para o banco acontece em `toCustomerRow`.
- * O servidor SEMPRE revalida com este schema — a validação do cliente é só UX.
+ * (servidor). Entrada e saída têm o mesmo tipo; a normalização para o banco
+ * acontece em `toCustomerRow`. O servidor SEMPRE revalida com este schema —
+ * a validação do cliente é só UX.
  *
  * As regras variam por cargo (`getCustomerFormSchema(role)`):
- * - admin:    aceita valor negativo (custo interno / desconto) e `payment_date`.
- * - reseller: valor não-negativo e `payment_date` é sempre descartado.
+ * - admin:    painel, uso interno, troca de painel e `payment_date`.
+ * - reseller: esses campos são sempre descartados (valores neutros).
  */
 const baseCustomerShape = {
   name: z
@@ -35,37 +52,64 @@ const baseCustomerShape = {
   app_name: z.string().trim().max(60, "Máximo de 60 caracteres"),
   expires_at: z.string().refine(isValidISODate, "Data de vencimento inválida"),
   notes: z.string().trim().max(1000, "Máximo de 1000 caracteres"),
-};
-
-function planValueSchema(min: number, message: string) {
-  return z
+  plan_value: z
     .string()
     .trim()
     .min(1, "Informe o valor do plano")
     .refine((v) => {
       const n = parseCurrency(v);
-      return Number.isFinite(n) && n >= min && n <= MAX_PLAN_VALUE;
-    }, message);
-}
+      return Number.isFinite(n) && n >= 0 && n <= MAX_PLAN_VALUE;
+    }, "Valor inválido"),
+};
 
-/** Schema dos admins principais: permite valores negativos e data de pagamento alternativa. */
+/** Schema dos admins principais. */
 export const adminCustomerFormSchema = z.object({
   ...baseCustomerShape,
-  plan_value: planValueSchema(MIN_PLAN_VALUE, "Valor inválido (mínimo -R$ 10.000,00)"),
   payment_date: z
     .string()
     .trim()
     .refine((v) => v === "" || isValidISODate(v), "Data de pagamento inválida"),
+  panel_id: optionalUuidSchema,
+  is_internal: z.boolean(),
+  /** Troca de painel consumiu 1 crédito extra → lança despesa `panel_migration`. */
+  charge_panel_migration: z.boolean(),
+  /** Origem/custo do crédito no cadastro de novo cliente ou na despesa de troca de painel. */
+  credit_source_mode: creditSourceModeSchema,
+  credit_batch_id: optionalUuidSchema,
+  custom_credit_cost: optionalUnitCostSchema,
 });
 
 /**
- * Schema do revendedor: valor não-negativo. `payment_date` é exclusivo do admin,
- * então qualquer valor enviado por um revendedor é descartado (vira "").
+ * Schema do revendedor: campos exclusivos do admin são descartados
+ * (viram valores neutros) mesmo que sejam enviados manualmente.
  */
 export const resellerCustomerFormSchema = z.object({
   ...baseCustomerShape,
-  plan_value: planValueSchema(0, "Valor inválido"),
   payment_date: z
+    .string()
+    .optional()
+    .transform(() => ""),
+  panel_id: z
+    .string()
+    .optional()
+    .transform(() => ""),
+  is_internal: z
+    .boolean()
+    .optional()
+    .transform(() => false),
+  charge_panel_migration: z
+    .boolean()
+    .optional()
+    .transform(() => false),
+  credit_source_mode: z
+    .string()
+    .optional()
+    .transform(() => "panel_default" as const),
+  credit_batch_id: z
+    .string()
+    .optional()
+    .transform(() => ""),
+  custom_credit_cost: z
     .string()
     .optional()
     .transform(() => ""),
@@ -75,12 +119,15 @@ export type CustomerFormValues = z.infer<typeof adminCustomerFormSchema>;
 
 /** Seleciona o schema pelo cargo. Ambos têm a mesma forma de entrada/saída. */
 export function getCustomerFormSchema(role: UserRole): z.ZodType<CustomerFormValues, CustomerFormValues> {
-  return role === "admin" ? adminCustomerFormSchema : (resellerCustomerFormSchema as z.ZodType<CustomerFormValues, CustomerFormValues>);
+  return role === "admin"
+    ? adminCustomerFormSchema
+    : (resellerCustomerFormSchema as unknown as z.ZodType<CustomerFormValues, CustomerFormValues>);
 }
 
 /**
- * Converte o formulário validado em colunas do banco. `payment_date` só é
- * incluído para admins — no UPDATE de um revendedor a coluna nem é tocada.
+ * Converte o formulário validado em colunas do banco. Campos exclusivos do
+ * admin (`payment_date`, `panel_id`, `is_internal`) só entram para admins — no
+ * UPDATE de um revendedor essas colunas nem são tocadas.
  * `owner_id`/`is_reseller` NUNCA vêm daqui: são definidos no servidor no INSERT.
  */
 export function toCustomerRow(values: CustomerFormValues, role: UserRole) {
@@ -95,19 +142,51 @@ export function toCustomerRow(values: CustomerFormValues, role: UserRole) {
     notes: values.notes || null,
   };
   if (role !== "admin") return row;
-  return { ...row, payment_date: values.payment_date || null };
+  return {
+    ...row,
+    // Uso interno: sem faturamento — o custo vem do crédito do painel.
+    plan_value: values.is_internal ? 0 : row.plan_value,
+    payment_date: values.payment_date || null,
+    panel_id: values.panel_id || null,
+    is_internal: values.is_internal,
+  };
 }
 
 export const customerIdSchema = z.string().uuid("ID inválido");
 
-/** Custo unitário do crédito (R$), arredondado para centavos. Usado no modal (UX) e na Server Action. */
-export const creditUnitCostSchema = z
-  .number({ message: "Informe um valor válido" }) // Zod 4 já rejeita NaN/Infinity
-  .min(MIN_CREDIT_UNIT_COST, "O custo não pode ser negativo")
-  .max(MAX_CREDIT_UNIT_COST, "O custo máximo é R$ 1.000,00")
-  .transform((n) => Math.round(n * 100) / 100);
-
 export const renewModeSchema = z.enum(["auto", "from_expiry", "from_today"]);
+
+export const renewMonthsSchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(6),
+  z.literal(12),
+]);
+
+export const renewCustomerInputSchema = z.object({
+  customerId: customerIdSchema,
+  months: renewMonthsSchema,
+  screens: z.number().int().min(1, "Mínimo de 1 tela").max(10, "Máximo de 10 telas"),
+  mode: renewModeSchema,
+  expires_at: z.string().refine(isValidISODate, "Data de vencimento inválida"),
+  payment_date: z.string().refine(isValidISODate, "Data de pagamento inválida"),
+  gross_amount: z
+    .string()
+    .trim()
+    .min(1, "Informe o valor da renovação")
+    .refine((v) => {
+      const n = parseCurrency(v);
+      return Number.isFinite(n) && n >= 0 && n <= MAX_PLAN_VALUE;
+    }, "Valor inválido"),
+  credits_used: z.number().int().min(0, "Créditos não podem ser negativos").max(120, "Máximo de 120 créditos"),
+  update_plan_value: z.boolean(),
+  credit_source_mode: creditSourceModeSchema.optional().default("batch"),
+  credit_batch_id: optionalUuidSchema.optional().default(""),
+  custom_credit_cost: optionalUnitCostSchema.optional().default(""),
+});
+
+export type RenewCustomerInput = z.infer<typeof renewCustomerInputSchema>;
 
 export const signInSchema = z.object({
   email: z.string().trim().toLowerCase().email("Informe um e-mail válido").max(254),

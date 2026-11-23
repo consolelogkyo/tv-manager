@@ -7,11 +7,10 @@ function Toaster(props: ToasterProps) {
     <Sonner
       theme="dark"
       position="top-center"
-      richColors
       closeButton
       toastOptions={{
         classNames: {
-          toast: "!rounded-xl !border-border !backdrop-blur-xl",
+          toast: "!rounded-lg !border-border !bg-popover !text-foreground !shadow-xl !shadow-black/40",
         },
       }}
       {...props}

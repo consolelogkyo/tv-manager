@@ -55,23 +55,6 @@ export function maskCurrency(value: string): string {
   });
 }
 
-/**
- * Igual a `maskCurrency`, mas preserva um "-" inicial (custos/descontos internos):
- * "-600" → "-6,00". Um "-" sozinho é mantido para permitir continuar digitando.
- */
-export function maskSignedCurrency(value: string): string {
-  const negative = value.trimStart().startsWith("-");
-  const masked = maskCurrency(value);
-  if (!negative) return masked;
-  return `-${masked}`;
-}
-
-/** Inverte o sinal de um valor já mascarado ("6,00" ⇄ "-6,00"). */
-export function toggleCurrencySign(value: string, negative: boolean): string {
-  const unsigned = value.trim().replace(/^-+/, "");
-  return negative ? `-${unsigned}` : unsigned;
-}
-
 /** "1.234,56" → 1234.56 */
 export function parseCurrency(value: string): number {
   const normalized = value.replace(/\./g, "").replace(",", ".").trim();
@@ -84,7 +67,24 @@ export function numberToCurrencyInput(value: number): string {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** 12.345 → "12,3%" */
+export function formatPercent(value: number, fractionDigits = 1): string {
+  const safe = Number.isFinite(value) ? value : 0;
+  return `${safe.toLocaleString("pt-BR", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits })}%`;
+}
+
 /* ------------------------------------------------------------- WhatsApp --- */
+
+/** Número com DDI 55 para o wa.me, ou `null` se inválido. Só dígitos chegam à URL. */
+function toWhatsAppNumber(phone: string): string | null {
+  const digits = onlyDigits(phone);
+  if (digits.length < 10) return null;
+  return digits.length > 11 && digits.startsWith("55") ? digits : `55${digits}`;
+}
+
+function firstNameOf(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? "";
+}
 
 export function buildWhatsAppLink(params: {
   phone: string;
@@ -93,13 +93,12 @@ export function buildWhatsAppLink(params: {
   daysRemaining: number;
   planValue: number;
 }): string | null {
-  const digits = onlyDigits(params.phone);
-  if (digits.length < 10) return null;
-  const withCountry = digits.length > 11 && digits.startsWith("55") ? digits : `55${digits}`;
+  const withCountry = toWhatsAppNumber(params.phone);
+  if (!withCountry) return null;
 
-  const firstName = params.name.trim().split(/\s+/)[0] ?? "";
+  const firstName = firstNameOf(params.name);
   const date = formatDateBR(params.expiresAt);
-  // Lançamentos internos (valor ≤ 0) nunca devem expor valor negativo na mensagem.
+  // Lançamentos internos (valor ≤ 0) nunca devem expor valor na mensagem.
   const hasValue = params.planValue > 0;
   const value = formatCurrency(params.planValue);
 
@@ -112,5 +111,14 @@ export function buildWhatsAppLink(params: {
           params.daysRemaining,
         ).toLowerCase()}). ${hasValue ? `O valor da renovação é ${value}. ` : ""}Quer que eu já renove pra você? 📺`;
 
+  return `https://wa.me/${withCountry}?text=${encodeURIComponent(message)}`;
+}
+
+/** Mensagem de recuperação para clientes em churn ("sentimos sua falta"). */
+export function buildRecoveryWhatsAppLink(params: { phone: string; name: string }): string | null {
+  const withCountry = toWhatsAppNumber(params.phone);
+  if (!withCountry) return null;
+  const firstName = firstNameOf(params.name);
+  const message = `Oi ${firstName}, tudo bem? Sentimos sua falta por aqui! 📺 Se quiser voltar a assistir, consigo reativar sua assinatura agora mesmo — é só me responder.`;
   return `https://wa.me/${withCountry}?text=${encodeURIComponent(message)}`;
 }

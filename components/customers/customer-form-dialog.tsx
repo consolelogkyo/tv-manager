@@ -3,9 +3,14 @@
 import { useEffect, useMemo, useTransition } from "react";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CreditCard, Loader2, Save, Star, TrendingDown, UserPlus } from "lucide-react";
+import { ArrowRightLeft, CreditCard, Home, Loader2, Save, Server, Star, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { createCustomer, updateCustomer } from "@/app/actions/customers";
+import {
+  CreditSourceSelector,
+  getDefaultCreditSourceForPanel,
+  resolveCreditSourcePreview,
+} from "@/components/finance/credit-source-selector";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,41 +21,44 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormField as Field } from "@/components/ui/form-field";
+import { InfoTip } from "@/components/ui/info-tip";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { RESELLER_COMMISSION, RESELLER_DEFAULT_PLAN_VALUE } from "@/lib/business";
+import { RESELLER_COMMISSION, RESELLER_DEFAULT_PLAN_VALUE, isInternalCustomer } from "@/lib/business";
 import { addDaysISO, getTodayISO } from "@/lib/date";
-import {
-  formatCurrency,
-  formatPhone,
-  maskCurrency,
-  maskMac,
-  maskPhone,
-  maskSignedCurrency,
-  numberToCurrencyInput,
-  toggleCurrencySign,
-} from "@/lib/format";
-import type { AppSuggestion, Customer, UserRole } from "@/lib/types";
+import { formatCurrency, formatPhone, maskCurrency, maskMac, maskPhone, numberToCurrencyInput } from "@/lib/format";
+import type { AppSuggestion, CreditSourceValue, Customer, PanelCreditBatch, PanelOption, UserRole } from "@/lib/types";
 import { normalizeText, shortBrandLabel } from "@/lib/tv-apps";
 import { getCustomerFormSchema, type CustomerFormValues } from "@/lib/validations";
 import { cn } from "@/lib/utils";
 
 const MAX_QUICK_SUGGESTIONS = 6;
+const ZERO_VALUE = "0,00";
 
-/** Valor sugerido ao marcar "custo interno" com o campo vazio. */
-const DEFAULT_INTERNAL_COST = "-6,00";
+export function panelOptionLabel(panel: Pick<PanelOption, "name" | "credit_cost" | "is_active">): string {
+  return `${panel.name} — ${formatCurrency(panel.credit_cost)}/crédito${panel.is_active ? "" : " (inativo)"}`;
+}
 
 function getDefaults(customer: Customer | null, role: UserRole): CustomerFormValues {
   if (customer) {
+    // Compatibilidade: valor negativo legado vira o toggle "Uso interno" com valor 0.
+    const internal = role === "admin" && isInternalCustomer(customer);
     return {
       name: customer.name,
       phone: formatPhone(customer.phone),
       mac_address: customer.mac_address,
       app_name: customer.app_name ?? "",
-      plan_value: numberToCurrencyInput(customer.plan_value),
+      plan_value: internal ? ZERO_VALUE : numberToCurrencyInput(Math.max(0, customer.plan_value)),
       expires_at: customer.expires_at,
       notes: customer.notes ?? "",
       payment_date: role === "admin" ? (customer.payment_date ?? "") : "",
+      panel_id: role === "admin" ? (customer.panel_id ?? "") : "",
+      is_internal: internal,
+      charge_panel_migration: false,
+      credit_source_mode: "panel_default",
+      credit_batch_id: "",
+      custom_credit_cost: "",
     };
   }
   return {
@@ -62,6 +70,12 @@ function getDefaults(customer: Customer | null, role: UserRole): CustomerFormVal
     expires_at: addDaysISO(getTodayISO(), 30),
     notes: "",
     payment_date: "",
+    panel_id: "",
+    is_internal: false,
+    charge_panel_migration: false,
+    credit_source_mode: "panel_default",
+    credit_batch_id: "",
+    custom_credit_cost: "",
   };
 }
 
@@ -71,9 +85,21 @@ type Props = {
   customer: Customer | null;
   appSuggestions?: AppSuggestion[];
   userRole: UserRole;
+  /** Painéis cadastrados (somente admin; lista vazia para o revendedor). */
+  panels?: PanelOption[];
+  /** Lotes de crédito ativos (somente admin). */
+  batches?: PanelCreditBatch[];
 };
 
-export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestions = [], userRole }: Props) {
+export function CustomerFormDialog({
+  open,
+  onOpenChange,
+  customer,
+  appSuggestions = [],
+  userRole,
+  panels = [],
+  batches = [],
+}: Props) {
   const isEdit = Boolean(customer);
   const isAdmin = userRole === "admin";
   const [pending, startTransition] = useTransition();
@@ -98,8 +124,50 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
   } = form;
 
   const appValue = watch("app_name") ?? "";
-  const planValue = watch("plan_value") ?? "";
-  const isInternalCost = isAdmin && planValue.trim().startsWith("-");
+  const isInternal = isAdmin && watch("is_internal") === true;
+  const selectedPanelId = watch("panel_id") ?? "";
+  const chargeMigration = watch("charge_panel_migration") === true;
+  const creditSourceMode = watch("credit_source_mode") ?? "panel_default";
+  const creditBatchId = watch("credit_batch_id") ?? "";
+  const customCreditCost = watch("custom_credit_cost") ?? "";
+
+  const originalPanelId = customer?.panel_id ?? null;
+  const selectedPanel = panels.find((p) => p.id === selectedPanelId) ?? null;
+  const originalPanel = panels.find((p) => p.id === originalPanelId) ?? null;
+  // Troca de painel = cliente já tinha painel e passou para outro (1º vínculo não conta).
+  const panelChanged = isAdmin && isEdit && Boolean(originalPanelId) && selectedPanelId !== "" && selectedPanelId !== originalPanelId;
+
+  const creditSourceValue: CreditSourceValue = useMemo(
+    () => ({
+      mode: creditSourceMode,
+      batchId: creditBatchId,
+      customUnitCost: customCreditCost,
+    }),
+    [creditSourceMode, creditBatchId, customCreditCost],
+  );
+
+  function applyCreditSource(next: CreditSourceValue) {
+    setValue("credit_source_mode", next.mode, { shouldDirty: true });
+    setValue("credit_batch_id", next.batchId, { shouldDirty: true });
+    setValue("custom_credit_cost", next.customUnitCost, { shouldDirty: true });
+  }
+
+  const creditPreview = useMemo(
+    () =>
+      resolveCreditSourcePreview({
+        panel: selectedPanel,
+        batches,
+        value: creditSourceValue,
+        creditsUsed: 1,
+      }),
+    [selectedPanel, batches, creditSourceValue],
+  );
+
+  // Painéis ativos + o painel atual do cliente, mesmo que tenha sido desativado.
+  const panelOptions = useMemo(
+    () => panels.filter((p) => p.is_active || p.id === originalPanelId),
+    [panels, originalPanelId],
+  );
 
   // Chips rápidos: filtra pelo texto digitado; favoritos sempre no topo.
   const quickSuggestions = useMemo(() => {
@@ -112,17 +180,31 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
     setValue("app_name", name, { shouldDirty: true, shouldValidate: true, shouldTouch: true });
   }
 
-  /** Atalho do admin: alterna o sinal do valor (custo interno / desconto no saldo). */
-  function setInternalCost(negative: boolean) {
-    const unsigned = planValue.trim().replace(/^-+/, "");
-    const next = negative && unsigned === "" ? DEFAULT_INTERNAL_COST : toggleCurrencySign(planValue, negative);
-    setValue("plan_value", next, { shouldDirty: true, shouldValidate: true, shouldTouch: true });
+  /** Uso interno: sem faturamento (valor 0) — o custo vem do crédito do painel. */
+  function setInternal(next: boolean) {
+    setValue("is_internal", next, { shouldDirty: true });
+    if (next) setValue("plan_value", ZERO_VALUE, { shouldDirty: true, shouldValidate: true });
   }
 
   // Recarrega os valores sempre que o modal abre (novo cliente ou outro cliente).
   useEffect(() => {
     if (open) reset(getDefaults(customer, userRole));
   }, [open, customer, userRole, reset]);
+
+  // Ao detectar a troca de painel, já sugere lançar o crédito extra (o admin pode desmarcar).
+  useEffect(() => {
+    setValue("charge_panel_migration", panelChanged);
+  }, [panelChanged, setValue]);
+
+  // Quando o admin seleciona ou troca o painel, pré-seleciona automaticamente o lote FIFO daquele painel.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const panel = panels.find((p) => p.id === selectedPanelId) ?? null;
+    const def = getDefaultCreditSourceForPanel(panel, batches);
+    setValue("credit_source_mode", def.mode);
+    setValue("credit_batch_id", def.batchId);
+    setValue("custom_credit_cost", def.customUnitCost);
+  }, [isAdmin, selectedPanelId, panels, batches, setValue]);
 
   const onSubmit = handleSubmit((values) => {
     startTransition(async () => {
@@ -159,8 +241,8 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
     <Dialog open={open} onOpenChange={(v) => !pending && onOpenChange(v)}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-display">
-            {isEdit ? <Save className="size-5 text-primary" /> : <UserPlus className="size-5 text-primary" />}
+          <DialogTitle className="flex items-center gap-2">
+            {isEdit ? <Save className="size-4 text-muted-foreground" strokeWidth={1.75} /> : <UserPlus className="size-4 text-muted-foreground" strokeWidth={1.75} />}
             {isEdit ? "Editar cliente" : "Novo cliente"}
           </DialogTitle>
           <DialogDescription>
@@ -201,11 +283,108 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
                 autoCapitalize="characters"
                 spellCheck={false}
                 maxLength={17}
-                className="font-mono uppercase tracking-wider"
+                className="font-mono uppercase"
                 aria-invalid={Boolean(errors.mac_address)}
                 {...withMask(register("mac_address"), maskMac)}
               />
             </Field>
+
+            {/* Exclusivo admin: o revendedor não vê nem envia o painel. */}
+            {isAdmin && (
+              <Field
+                label="Painel / Servidor"
+                htmlFor="customer-panel"
+                info="panel"
+                error={errors.panel_id?.message}
+                optional
+                className="sm:col-span-2"
+                hint={
+                  panels.length === 0
+                    ? "Nenhum painel cadastrado. Cadastre em Financeiro → Painéis."
+                    : isInternal && !selectedPanel
+                      ? "Selecione o painel para contabilizar o custo do crédito deste acesso interno."
+                      : undefined
+                }
+              >
+                <div className="relative">
+                  <Server className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <NativeSelect
+                    id="customer-panel"
+                    className="pl-9"
+                    aria-invalid={Boolean(errors.panel_id)}
+                    {...register("panel_id")}
+                  >
+                    <option value="">Sem painel</option>
+                    {panelOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {panelOptionLabel(p)}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+
+                {/* Cadastro de novo cliente: permite escolher o lote (FIFO) ou custo avulso do 1º crédito */}
+                {!isEdit && selectedPanel && (
+                  <CreditSourceSelector
+                    idPrefix="customer-create-credit"
+                    label="Origem e custo do crédito deste cadastro"
+                    panel={selectedPanel}
+                    batches={batches}
+                    creditsUsed={1}
+                    value={creditSourceValue}
+                    onChange={applyCreditSource}
+                  />
+                )}
+
+                {panelChanged && selectedPanel && (
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="customer-charge-migration"
+                      className={cn(
+                        "flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors",
+                        chargeMigration
+                          ? "border-warning/30 bg-warning/10 text-foreground"
+                          : "border-border bg-background text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <input
+                        id="customer-charge-migration"
+                        type="checkbox"
+                        checked={chargeMigration}
+                        onChange={(e) => setValue("charge_panel_migration", e.target.checked, { shouldDirty: true })}
+                        className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary"
+                      />
+                      <span className="flex items-start gap-1 leading-snug">
+                        <ArrowRightLeft className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                        <span>
+                          Essa troca consumiu 1 crédito extra no novo painel?{" "}
+                          <span className="font-medium">
+                            (Lançar {formatCurrency(creditPreview.totalCost)} nas despesas do mês atual)
+                          </span>
+                          {originalPanel && (
+                            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                              {originalPanel.name} → {selectedPanel.name}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                      <InfoTip term="panelMigration" className="-my-0.5 ml-auto" />
+                    </label>
+                    {chargeMigration && (
+                      <CreditSourceSelector
+                        idPrefix="customer-migration-credit"
+                        label="Origem e custo do crédito da troca"
+                        panel={selectedPanel}
+                        batches={batches}
+                        creditsUsed={1}
+                        value={creditSourceValue}
+                        onChange={applyCreditSource}
+                      />
+                    )}
+                  </div>
+                )}
+              </Field>
+            )}
 
             <Field label="Aplicativo" htmlFor="customer-app" error={errors.app_name?.message} optional>
               <Input
@@ -224,7 +403,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
                       <option
                         key={s.name}
                         value={s.name}
-                        label={`${s.isFavorite ? "⭐ Favorito · " : ""}${s.brands.map(shortBrandLabel).join(", ")}`}
+                        label={`${s.isFavorite ? "Favorito · " : ""}${s.brands.map(shortBrandLabel).join(", ")}`}
                       />
                     ))}
                   </datalist>
@@ -241,12 +420,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
                             title={s.brands.join(" · ")}
                             aria-pressed={selected}
                             className={cn(
-                              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-all cursor-pointer active:scale-95",
+                              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer active:scale-95",
                               selected
                                 ? "border-primary/60 bg-primary/20 text-foreground"
                                 : s.isFavorite
                                   ? "border-warning/35 bg-warning/10 text-warning hover:bg-warning/20"
-                                  : "border-border/70 bg-card/50 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
                             )}
                           >
                             {s.isFavorite && <Star className="size-3 fill-current" />}
@@ -266,52 +445,51 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
               error={errors.plan_value?.message}
               hint={
                 isAdmin
-                  ? isInternalCost
-                    ? "Lançamento negativo: será abatido do saldo líquido."
+                  ? isInternal
+                    ? selectedPanel
+                      ? `Sem faturamento. Custo real: ${formatCurrency(selectedPanel.credit_cost)}/mês (crédito do painel).`
+                      : "Sem faturamento. O custo real vem do crédito do painel."
                     : undefined
                   : `Sua comissão: ${formatCurrency(RESELLER_COMMISSION)} por cliente ativo.`
               }
             >
               <div className="relative">
-                <span
-                  className={cn(
-                    "pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm",
-                    isInternalCost ? "text-destructive" : "text-muted-foreground",
-                  )}
-                >
+                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
                   R$
                 </span>
                 <Input
                   id="customer-value"
-                  inputMode={isAdmin ? "decimal" : "numeric"}
-                  placeholder={isAdmin ? "0,00 ou -6,00" : "0,00"}
+                  inputMode="numeric"
+                  placeholder="0,00"
                   autoComplete="off"
-                  className={cn("pl-10 tabular-nums", isInternalCost && "text-destructive")}
+                  readOnly={isInternal}
+                  className={cn("pl-10 tabular-nums", isInternal && "cursor-not-allowed opacity-60")}
                   aria-invalid={Boolean(errors.plan_value)}
-                  {...withMask(register("plan_value"), isAdmin ? maskSignedCurrency : maskCurrency)}
+                  {...withMask(register("plan_value"), maskCurrency)}
                 />
               </div>
               {isAdmin && (
                 <label
-                  htmlFor="customer-internal-cost"
+                  htmlFor="customer-internal"
                   className={cn(
                     "flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors",
-                    isInternalCost
-                      ? "border-destructive/40 bg-destructive/10 text-destructive"
-                      : "border-border/70 bg-card/40 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    isInternal
+                      ? "border-border bg-muted text-foreground"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground",
                   )}
                 >
                   <input
-                    id="customer-internal-cost"
+                    id="customer-internal"
                     type="checkbox"
-                    checked={isInternalCost}
-                    onChange={(e) => setInternalCost(e.target.checked)}
-                    className="mt-0.5 size-4 shrink-0 cursor-pointer accent-destructive"
+                    checked={isInternal}
+                    onChange={(e) => setInternal(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary"
                   />
                   <span className="flex items-start gap-1 leading-snug">
-                    <TrendingDown className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-                    Lançar como Custo / Desconto no Saldo (Valor Negativo)
+                    <Home className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                    Uso interno / casa (sem faturamento)
                   </span>
+                  <InfoTip term="internalUse" className="-my-0.5 ml-auto" />
                 </label>
               )}
             </Field>
@@ -334,10 +512,12 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
             {/* Exclusivo admin: o revendedor nunca vê nem envia este campo. */}
             {isAdmin && (
               <Field
-                label="Dia/Data do Pagamento"
+                label="Data do pagamento"
                 htmlFor="customer-payment-date"
+                info="paymentDate"
                 error={errors.payment_date?.message}
                 optional
+                className="sm:col-span-2"
                 hint="Só para casos isolados em que o cliente paga em data diferente do vencimento."
               >
                 <div className="relative">
@@ -377,39 +557,5 @@ export function CustomerFormDialog({ open, onOpenChange, customer, appSuggestion
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  error,
-  hint,
-  optional,
-  className,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  error?: string;
-  hint?: string;
-  optional?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={htmlFor}>
-        {label}
-        {optional && <span className="text-xs font-normal text-muted-foreground">(opcional)</span>}
-      </Label>
-      {children}
-      {hint && !error && <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>}
-      {error && (
-        <p role="alert" className="text-xs text-destructive animate-in fade-in slide-in-from-top-0.5">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

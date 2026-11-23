@@ -2,36 +2,42 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AppWindow, Users } from "lucide-react";
+import { AppWindow, Users, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Clientes", icon: Users, id: "nav-customers" },
-  { href: "/apps", label: "Apps & TVs", icon: AppWindow, id: "nav-apps" },
+  { href: "/", label: "Clientes", icon: Users, id: "nav-customers", adminOnly: false },
+  { href: "/finance", label: "Financeiro", icon: Wallet, id: "nav-finance", adminOnly: true },
+  { href: "/apps", label: "Apps & TVs", icon: AppWindow, id: "nav-apps", adminOnly: false },
 ] as const;
 
-export function MainNav({ className }: { className?: string }) {
+/**
+ * Navegação principal. O item "Financeiro" só é exibido para admins — isso é
+ * apenas UX: a rota `/finance` e suas Server Actions validam o cargo no servidor.
+ */
+export function MainNav({ className, isAdmin }: { className?: string; isAdmin: boolean }) {
   const pathname = usePathname();
+  const items = NAV_ITEMS.filter((item) => isAdmin || !item.adminOnly);
 
   return (
     <nav aria-label="Navegação principal" className={className}>
-      <ul className="flex items-center gap-1 rounded-xl border border-border/70 bg-card/60 p-1 backdrop-blur">
-        {NAV_ITEMS.map(({ href, label, icon: Icon, id }) => {
+      <ul className="flex items-center gap-1 rounded-lg bg-white/[0.04] p-1 sm:bg-transparent sm:p-0">
+        {items.map(({ href, label, icon: Icon, id }) => {
           const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
           return (
-            <li key={href} className="flex-1 sm:flex-none">
+            <li key={href} className="min-w-0 flex-1 sm:flex-none">
               <Link
                 id={id}
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex h-8 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium transition-all duration-200",
+                  "flex h-8 items-center justify-center gap-2 rounded-md px-3 text-[13px] font-medium whitespace-nowrap transition-colors duration-150 sm:text-sm",
                   active
-                    ? "bg-gradient-to-r from-primary/25 to-accent-violet/20 text-foreground shadow-sm shadow-primary/20 ring-1 ring-primary/40"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    ? "bg-primary/20 text-foreground shadow-[inset_0_0_0_1px_rgb(91_132_232/0.35)]"
+                    : "text-muted-foreground hover:bg-white/[0.06] hover:text-foreground",
                 )}
               >
-                <Icon className={cn("size-4", active ? "text-primary" : "")} />
+                <Icon className={cn("size-4 shrink-0", active && "text-primary-ink")} strokeWidth={1.75} aria-hidden="true" />
                 {label}
               </Link>
             </li>

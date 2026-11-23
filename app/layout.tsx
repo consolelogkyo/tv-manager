@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Outfit } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
-const outfit = Outfit({ variable: "--font-outfit", subsets: ["latin"], display: "swap" });
+const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"], display: "swap" });
 
 // Renderização dinâmica obrigatória: o nonce da CSP é gerado por requisição no
 // middleware e o Next.js só consegue aplicá-lo em páginas renderizadas sob demanda.
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#12131f",
+  themeColor: "#131b2e",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -32,7 +32,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     // suppressHydrationWarning: extensões do navegador (ex.: LanguageTool, Grammarly)
     // injetam atributos no <html> antes do React hidratar. Vale só para este elemento.
     <html lang="pt-BR" className="dark" suppressHydrationWarning>
-      <body className={`${inter.variable} ${outfit.variable} min-h-dvh font-sans`}>
+      <body className={`${inter.variable} ${jetbrains.variable} min-h-dvh font-sans`}>
         <div className="app-backdrop" aria-hidden="true" />
         {children}
         <Toaster />

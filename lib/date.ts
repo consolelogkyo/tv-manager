@@ -11,15 +11,24 @@ export const EXPIRING_WINDOW_DAYS = 3;
 
 export type CustomerStatus = "active" | "expiring" | "expired";
 
+// "en-CA" formata como YYYY-MM-DD.
+const appDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: APP_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 /** Data de hoje no fuso da aplicação, no formato ISO `YYYY-MM-DD`. */
 export function getTodayISO(): string {
-  // "en-CA" formata como YYYY-MM-DD.
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  return appDateFormatter.format(new Date());
+}
+
+/** Timestamp (ex.: `created_at`) → data `YYYY-MM-DD` no fuso da aplicação. */
+export function toAppDateISO(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp.slice(0, 10);
+  return appDateFormatter.format(date);
 }
 
 function toISO(date: Date): string {

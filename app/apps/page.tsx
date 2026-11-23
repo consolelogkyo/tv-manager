@@ -25,13 +25,11 @@ export default async function AppsPage() {
 
   return (
     <>
-      <AppHeader email={user.email ?? "admin"} />
-      <main className="mx-auto max-w-7xl px-4 pt-6 pb-28 sm:px-6 sm:pb-12 lg:px-8">
-        <div className="mb-6 animate-fade-up">
-          <p className="text-sm text-muted-foreground">Guia de prioridade por marca/sistema</p>
-          <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-            <span className="text-gradient">Catálogo de Apps por TV</span>
-          </h1>
+      <AppHeader email={user.email ?? "admin"} role={role} />
+      <main className="mx-auto max-w-7xl animate-enter px-4 pt-6 pb-28 sm:px-6 sm:pt-8 sm:pb-12 lg:px-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-medium">Catálogo de Apps por TV</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Guia de prioridade por marca/sistema</p>
         </div>
         <TvAppsCatalog apps={apps} />
       </main>

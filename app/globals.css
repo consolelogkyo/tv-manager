@@ -4,43 +4,56 @@
 @custom-variant dark (&:is(.dark *));
 
 /* -------------------------------------------------------------------------- */
-/* Design tokens — dark premium (indigo/violeta + status esmeralda/âmbar/rosa) */
+/* Tokens — grafite neutro + 1 acento (azul cobalto).                          */
+/* Superfícies, bordas e texto vêm de uma única rampa cinza; a cor fica para  */
+/* o conteúdo (status, DRE e gráfico). Direção: "livro-caixa do balcão".       */
 /* -------------------------------------------------------------------------- */
 :root {
-  --radius: 0.75rem;
+  --radius: 0.625rem;
 
-  --background: oklch(0.145 0.022 268);
-  --foreground: oklch(0.96 0.01 268);
+  /* Rampa grafite levemente azulada: fundo bem escuro, componentes um passo acima */
+  --background: #0d1017;
+  --foreground: #ededed;
+  --card: #171a21;
+  --card-foreground: #ededed;
+  --popover: #1c2029;
+  --popover-foreground: #ededed;
+  --muted: #232833;
+  --secondary: #232833;
+  --secondary-foreground: #ededed;
+  --accent: #232833;
+  --accent-foreground: #ededed;
 
-  --card: oklch(0.19 0.025 268);
-  --card-foreground: oklch(0.96 0.01 268);
-  --popover: oklch(0.185 0.026 268);
-  --popover-foreground: oklch(0.96 0.01 268);
+  /* 3 papéis de texto: primário (foreground), secundário e discreto */
+  --muted-foreground: #a1a1a6;
+  --subtle-foreground: #85858b;
 
-  --primary: oklch(0.64 0.2 270);
-  --primary-foreground: oklch(0.99 0 0);
-  --accent-violet: oklch(0.62 0.23 300);
+  /* Acento: preenchimento (texto branco, contraste ≥ 4.5) e versão "tinta" para texto sobre o escuro */
+  --primary: #2f5fd0;
+  --primary-hover: #3a6ade;
+  --primary-foreground: #ffffff;
+  --primary-ink: #8aaeff;
 
-  --secondary: oklch(0.25 0.03 268);
-  --secondary-foreground: oklch(0.94 0.01 268);
-  --muted: oklch(0.24 0.028 268);
-  --muted-foreground: oklch(0.7 0.025 268);
-  --accent: oklch(0.26 0.04 270);
-  --accent-foreground: oklch(0.96 0.01 268);
+  /* Semânticas (só carregam significado) */
+  --success: #4cc38a;
+  --warning: #e0a43a;
+  --destructive: #e5484d;
 
-  --success: oklch(0.76 0.16 160);
-  --warning: oklch(0.82 0.16 80);
-  --destructive: oklch(0.68 0.21 18);
+  /* Linhas finas */
+  --border: rgb(237 237 237 / 0.08);
+  --input: rgb(237 237 237 / 0.14);
+  --ring: #5b84e8;
 
-  --border: oklch(0.3 0.03 268);
-  --input: oklch(0.32 0.03 268);
-  --ring: oklch(0.64 0.2 270);
+  /* Barra superior: azul-ardósia discreto e translúcido (o conteúdo aparece levemente por trás ao rolar) */
+  --header: rgb(19 27 46 / 0.78);
+  --header-border: rgb(91 132 232 / 0.16);
+
+  --ease-out-app: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-outfit), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -49,12 +62,14 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
-  --color-accent-violet: var(--accent-violet);
+  --color-primary-ink: var(--primary-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-success: var(--success);
@@ -63,33 +78,27 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-header: var(--header);
+  --color-header-border: var(--header-border);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-float: float 14s ease-in-out infinite;
+  --ease-app: var(--ease-out-app);
 
-  @keyframes fade-up {
+  /* Única entrada da página: fade + subida curta */
+  --animate-enter: enter 0.32s var(--ease-out-app) both;
+
+  @keyframes enter {
     from {
       opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(6px);
     }
     to {
       opacity: 1;
       transform: translateY(0);
-    }
-  }
-
-  @keyframes float {
-    0%,
-    100% {
-      transform: translate3d(0, 0, 0) scale(1);
-    }
-    50% {
-      transform: translate3d(2%, -3%, 0) scale(1.06);
     }
   }
 }
@@ -110,40 +119,48 @@
   }
 
   ::selection {
-    background: color-mix(in oklch, var(--primary) 40%, transparent);
+    background: color-mix(in srgb, var(--primary) 45%, transparent);
   }
 }
 
 @layer components {
-  /* Fundo com "aurora" suave */
+  /*
+   * Fundo "grade de pixels": uma malha fina de 32px (como os pixels de uma tela)
+   * com um ponto azul a cada 4 casas, banhada por um véu cobalto no topo e
+   * esmaecendo para baixo. Fica atrás de tudo e não reage ao mouse.
+   */
   .app-backdrop {
     position: fixed;
     inset: 0;
     z-index: -1;
-    overflow: hidden;
     pointer-events: none;
     background:
-      radial-gradient(60rem 40rem at 10% -10%, color-mix(in oklch, var(--primary) 22%, transparent), transparent 60%),
-      radial-gradient(50rem 35rem at 100% 0%, color-mix(in oklch, var(--accent-violet) 18%, transparent), transparent 60%),
-      radial-gradient(40rem 30rem at 50% 110%, color-mix(in oklch, var(--success) 8%, transparent), transparent 60%),
+      linear-gradient(180deg, rgb(47 95 208 / 0.14) 0%, rgb(47 95 208 / 0.04) 360px, transparent 720px),
       var(--background);
   }
 
+  .app-backdrop::before,
   .app-backdrop::after {
     content: "";
     position: absolute;
     inset: 0;
-    background-image: linear-gradient(to right, oklch(1 0 0 / 0.025) 1px, transparent 1px),
-      linear-gradient(to bottom, oklch(1 0 0 / 0.025) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse at top, black 30%, transparent 75%);
+    mask-image: linear-gradient(to bottom, #000 0%, rgb(0 0 0 / 0.7) 45%, transparent 95%);
   }
 
-  .text-gradient {
-    background: linear-gradient(120deg, var(--foreground) 10%, color-mix(in oklch, var(--primary) 70%, white) 60%, var(--accent-violet));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  /* Malha */
+  .app-backdrop::before {
+    background-image:
+      linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+  }
+
+  /* Pontos de "sinal" nas interseções, a cada 4 casas */
+  .app-backdrop::after {
+    background-image: radial-gradient(circle at 0 0, rgb(91 132 232 / 0.45) 1.25px, transparent 1.75px);
+    background-size: 128px 128px;
+    background-position: -1px -1px;
   }
 }
 

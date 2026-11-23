@@ -122,7 +122,7 @@ export async function updateTvApp(id: string, values: TvAppFormValues): Promise<
   if (!data || data.length === 0) return { ok: false, error: NOT_FOUND };
 
   revalidateCatalog();
-  return { ok: true, message: "Alterações salvas!" };
+  return { ok: true, message: "Alterações salvas" };
 }
 
 /* -------------------------------------------------------------- FAVORITE --- */
@@ -151,7 +151,7 @@ export async function toggleFavoriteTvApp(id: string, isFavorite: boolean): Prom
   revalidateCatalog();
   return {
     ok: true,
-    message: favParsed.data ? `${data[0].app_name} marcado como favorito ⭐` : `${data[0].app_name} removido dos favoritos`,
+    message: favParsed.data ? `${data[0].app_name} marcado como favorito` : `${data[0].app_name} removido dos favoritos`,
   };
 }
 

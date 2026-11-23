@@ -17,7 +17,7 @@ export function LoginForm() {
         <div
           role="alert"
           aria-live="assertive"
-          className="flex items-start gap-2.5 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive animate-in fade-in slide-in-from-top-1"
+          className="flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive animate-in fade-in slide-in-from-top-1"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
           <span>{state.error}</span>
@@ -65,7 +65,7 @@ export function LoginForm() {
             type="button"
             id="login-toggle-password"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground transition hover:text-foreground cursor-pointer"
+            className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1.5 cursor-pointer text-subtle-foreground transition-colors hover:text-foreground"
             aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
           >
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -76,7 +76,7 @@ export function LoginForm() {
       <Button id="login-submit" type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? (
           <>
-            <Loader2 className="animate-spin" /> Entrando...
+            <Loader2 className="animate-spin" /> Entrando
           </>
         ) : (
           <>

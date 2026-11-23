@@ -1,23 +1,21 @@
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import type { CustomerStatus } from "@/lib/date";
+import type { DisplayStatus } from "@/components/customers/types";
+import { SignalDot } from "@/components/ui/signal-dot";
+import { cn } from "@/lib/utils";
 
-const STATUS_CONFIG: Record<
-  CustomerStatus,
-  { label: string; variant: "success" | "warning" | "danger"; Icon: typeof CheckCircle2 }
-> = {
-  active: { label: "Ativo", variant: "success", Icon: CheckCircle2 },
-  expiring: { label: "Vencendo", variant: "warning", Icon: AlertTriangle },
-  expired: { label: "Vencido", variant: "danger", Icon: XCircle },
+const STATUS_CONFIG: Record<DisplayStatus, { label: string; text: string }> = {
+  active: { label: "Ativo", text: "text-foreground" },
+  expiring: { label: "Vencendo", text: "text-warning" },
+  expired: { label: "Vencido", text: "text-destructive" },
+  canceled: { label: "Cancelado", text: "text-muted-foreground" },
 };
 
-export function StatusBadge({ status, days }: { status: CustomerStatus; days: number }) {
-  const { label, variant, Icon } = STATUS_CONFIG[status];
-  const text = status === "expiring" && days === 0 ? "Vence hoje" : label;
+/** Status com o "ponto de sinal" — a mesma marca usada nos cards de resumo. */
+export function StatusBadge({ status, days }: { status: DisplayStatus; days: number }) {
+  const { label, text } = STATUS_CONFIG[status];
   return (
-    <Badge variant={variant}>
-      <Icon />
-      {text}
-    </Badge>
+    <span className={cn("inline-flex items-center gap-2 text-[13px] font-medium whitespace-nowrap", text)}>
+      <SignalDot tone={status} pulse={status === "expiring"} />
+      {status === "expiring" && days === 0 ? "Vence hoje" : label}
+    </span>
   );
 }

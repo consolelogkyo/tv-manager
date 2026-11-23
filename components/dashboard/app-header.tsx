@@ -1,38 +1,25 @@
-import { LogOut, Tv } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
+import { Logo } from "@/components/brand/logo";
 import { MainNav } from "@/components/dashboard/main-nav";
 import { Button } from "@/components/ui/button";
+import type { UserRole } from "@/lib/types";
 
-function initials(email: string) {
-  return email.slice(0, 2).toUpperCase();
-}
-
-export function AppHeader({ email }: { email: string }) {
+export function AppHeader({ email, role }: { email: string; role: UserRole }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur-xl pt-[env(safe-area-inset-top)]">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 sm:h-16 sm:flex-nowrap sm:py-0 sm:px-6 lg:px-8">
-        <div className="flex h-12 items-center gap-3 sm:h-auto">
-          <div className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-accent-violet shadow-lg shadow-primary/30 ring-1 ring-white/15">
-            <Tv className="size-[18px] text-white" strokeWidth={2.2} />
-          </div>
-          <div className="leading-tight">
-            <p className="font-display text-base font-semibold tracking-tight">TV Manager</p>
-            <p className="hidden text-xs text-muted-foreground lg:block">Gestão de assinaturas</p>
-          </div>
+    <header className="sticky top-0 z-30 border-b border-header-border bg-header pt-[env(safe-area-inset-top)] backdrop-blur-md backdrop-saturate-150">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-2 px-4 py-2 sm:h-14 sm:flex-nowrap sm:px-6 sm:py-0 lg:px-8">
+        <div className="flex h-10 items-center sm:h-auto">
+          <Logo />
         </div>
 
-        <MainNav className="order-last w-full sm:order-none sm:w-auto" />
+        <MainNav className="order-last w-full sm:order-none sm:w-auto" isAdmin={role === "admin"} />
 
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-card/60 py-1 pr-3 pl-1 md:flex">
-            <span className="grid size-7 place-items-center rounded-full bg-primary/20 text-[11px] font-bold text-primary">
-              {initials(email)}
-            </span>
-            <span className="max-w-[180px] truncate text-xs text-muted-foreground">{email}</span>
-          </div>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden max-w-[220px] truncate text-[13px] text-muted-foreground md:block">{email}</span>
           {/* Logout via Server Action (POST + verificação de Origin) — invalida a sessão no servidor. */}
           <form action={signOut}>
-            <Button id="sign-out" type="submit" variant="ghost" size="sm" className="text-muted-foreground">
+            <Button id="sign-out" type="submit" variant="ghost" size="sm" className="text-muted-foreground hover:bg-white/[0.06] hover:text-foreground">
               <LogOut />
               <span className="hidden sm:inline">Sair</span>
             </Button>
